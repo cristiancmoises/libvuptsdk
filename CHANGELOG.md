@@ -1,0 +1,259 @@
+# libzuptsdk changelog
+
+All notable changes to libzuptsdk are documented in this file. The
+format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+at the ABI level (see README.md "Versioning").
+
+---
+
+## [2.0.0] — 2026-04-29
+
+### Extended verification sprint (audit-extended; v2.0.0 final)
+
+After the initial 16-phase audit, an extended sprint added 5 new test
+categories raising the verification surface to **22 phases** and the
+cumulative fuzz iteration count to **942,800+**. All green.
+
+**New tests** (all shipped in `tools/` for reproducibility):
+
+1. **Side-channel timing variance** (`tools/timing_variance.c`) — 500
+   iterations per failure mode. MAC-fail and KEM-decaps-fail medians are
+   within **1.6%** of valid-decrypt timing. No information leakage by
+   timing channel.
+2. **Format fuzz** (`tools/format_fuzz.c`) — 50,000 random byte strings
+   fed to decrypt. **0/50,000 false-accepts, 0 crashes.**
+3. **Key isolation** (`tools/key_isolation.c`) — 1,293 distinct secret
+   windows checked across 100 ciphertexts (129,300 trials).
+   **0 secret-key bytes leak into ciphertext.**
+4. **Hardening audit** (`tools/checksec_lib.sh`) — comprehensive ELF
+   inspection (RELRO, NX, stack canary, FORTIFY_SOURCE, RPATH,
+   symbol versions, dangerous symbols, strip status).
+5. **Performance benchmarks** (`bench/bench_throughput.c`) — wall-clock
+   median + p99 latency and sustained throughput. **First measured-and-
+   reproducible perf characterization for libzuptsdk.**
+
+**New documentation**:
+
+- `BENCHMARKS.md` (159 lines) — full performance characterization with
+  cost model and reproduction instructions
+- `doc/API_REFERENCE.md` (403 lines) — every public function with full
+  signature, parameters, returns, examples, threading, ownership rules
+- `doc/TROUBLESHOOTING.md` (238 lines) — common build/runtime issues
+- `SECURITY.md` extended with hardening posture, side-channel posture,
+  key-isolation results, format-fuzz results, cumulative test history
+- `AUDIT.md` extended with all 5 new tests and revised TL;DR table
+  (22 verification phases)
+
+**New Makefile targets**:
+
+```
+make audit-hardening   # ELF property audit
+make audit-fuzz        # All 6 fuzzers (tamper, multi-tamper, wrong-key,
+                       #   format, key-isolation, timing-variance)
+make audit-all         # Full sweep: smoke + ASAN + license + hardening + fuzz
+make bench             # Performance benchmark
+```
+
+**Findings & corrections from this sprint**:
+
+- **Documentation correction**: README previously claimed Argon2id at
+  ~250 ms. Measured median is ~1.09 sec on 2-CPU/2.8 GHz. Corrected to
+  honest numbers in BENCHMARKS.md and README.md. (Hardware varies; modern
+  desktop with 8+ cores will be 200-400 ms.)
+- **Hardening gap (canonical prebuilt)**: Partial RELRO instead of Full
+  RELRO — `BIND_NOW` ELF flag missing. Source build has full hardening.
+  Tracked as next-minor fix; recommendation is to rebuild the prebuilt
+  binary with `-Wl,-z,relro,-z,now`.
+- **Install hygiene**: `make install` now strips debug info from the
+  installed library (721 KiB → 151 KiB, 5× smaller). Override with
+  `make install STRIP_INSTALL=0` for debug installs.
+
+### Repository established
+
+libzuptsdk has been split out of the monolithic `zupt` repository into
+a standalone library project. This change improves:
+
+- **Audit hygiene**: the SDK now has its own scoped CHANGELOG and AUDIT
+  files. Downstream library users can answer "what's been verified in
+  libzuptsdk specifically?" without wading through CLI-side history.
+- **Release cadence**: SDK versions can ship independently. CLI bug
+  fixes no longer drag the SDK along, and SDK feature additions don't
+  block CLI patch releases.
+- **Build hygiene**: SDK CI is decoupled from the CLI's jasminc +
+  AArch64 QEMU pipeline. Per-change CI cost halved.
+
+### License unification — IMPORTANT
+
+The five Jasmin assembly source files (`jasmin/*.jazz`) previously
+declared "MIT License" in their headers as a copy-paste artifact from
+an earlier draft. They have been **relicensed to AGPL-3.0-or-later**
+to match the rest of the project. Cristian Cezar Moisés is the sole
+author of all five files, so this relicensing is the author's own
+prerogative. No external contributor's work was relicensed.
+
+The five compiled assembly files (`jasmin/*.s`) are generated output
+from the corresponding `.jazz` sources via `jasminc 2026.03.0`; they
+inherit the AGPL-3.0-or-later license of their inputs.
+
+Additionally, four VaptVupt files (`src/vaptvupt_api.c`,
+`include/vaptvupt.h`, `include/vaptvupt_api.h`, `include/vv_platform.h`)
+declared "GPL-3.0-or-later" instead of "AGPL-3.0-or-later". These have
+been corrected to AGPL-3.0-or-later. VaptVupt is also Cristian Cezar
+Moisés's own work (sole author of the LZ + tANS codec), so this is
+also a sole-author relicensing.
+
+After these changes, every file in the repository carries an explicit
+`SPDX-License-Identifier: AGPL-3.0-or-later` header. The new
+`make audit-licenses` target verifies this on every build/CI run.
+
+### Hard verification audit (10 phases, all green)
+
+A 10-phase line-by-line verification was performed prior to first
+release. Findings and fixes:
+
+1. **License headers** — every `.c`, `.h`, `.hpp`, `.py`, `.sh`,
+   `.yml`, `.jazz`, `.s`, `Makefile`, and `.map` file now has SPDX +
+   copyright. Five `.jazz` files relicensed from MIT (see above).
+   Markdown docs (`AUDIT.md`, `CHANGELOG.md`, `SECURITY.md`) gained
+   license footers. `README.md` already had one.
+2. **Compiler warnings** — GCC `-Wall -Wextra -Wpedantic
+   -Wmissing-prototypes -Wstrict-prototypes`: zero warnings on the
+   from-source library and on `tests/smoke_test.c`. Fixed:
+   `zupt_mlkem768_selftest` was missing prototype (made `static
+   __attribute__((unused))`); `mkstemp` warning in smoke_test
+   (added `_DEFAULT_SOURCE`/`_XOPEN_SOURCE` defines).
+3. **Symbol leakage** — source-built `libzuptsdk-base.so` exports 55
+   symbols, all `zuptsdk_*` namespaced, zero internal leakage (no
+   `zupt_*`, `vv_*`, or `decompress_*` exported). Verified by `nm -D`.
+4. **C++ ABI compatibility** — all 9 public-API headers
+   (`zuptsdk.h`, `zuptsdk_easy.h`, `zuptsdk_metrics.h`, 6×
+   `zsdk_*.h`) gained `#ifdef __cplusplus / extern "C"` guards.
+   Verified by compiling and linking a C++17 program that includes
+   all 9 headers.
+5. **Memory safety** — ASAN/UBSAN with `detect_leaks=1`: zero leaks,
+   zero memory errors. New `tests/source_smoke.c` exercises the
+   source-buildable subset under sanitizer (6/6 properties).
+6. **Heap balance** — 159 `malloc`/`calloc`/`realloc` sites, 321
+   `free()` sites (multiple cleanup paths share frees, normal). ASAN
+   confirms no leaks.
+7. **`make install` end-to-end** — `pkg-config` file is now
+   regenerated at install time using current `$(PREFIX)`,
+   `$(LIBDIR)`, `$(INCLUDEDIR)`. Verified: `make install
+   PREFIX=/opt/zupt` produces a `.pc` with `/opt/zupt` paths, and
+   `pkg-config --cflags --libs zuptsdk` reports them correctly.
+   Previously: hardcoded `/usr/local`.
+8. **Cross-compile arch detection** — `$(CC) -dumpmachine` correctly
+   selects NEON SIMD flags when `CC=aarch64-linux-gnu-gcc` is passed.
+   Verified with a fake-dumpmachine wrapper.
+9. **Hermetic dist tarball** — `make dist` produces a 91-file tarball
+   with no `.o`, no `__pycache__`, no `build/` directory. Fresh
+   extract followed by `make` + `make test` + `make test-asan`
+   succeeds with 29/29 properties green.
+10. **Documentation** — README/CHANGELOG/SECURITY/AUDIT all reflect
+    the current state. No stale references to the zupt monorepo
+    SDK paths.
+
+### Added
+
+- `Makefile` with two-library build (source + canonical prebuilt) and
+  `make audit` target that verifies source build is a strict subset of
+  canonical
+- `tests/smoke_test.c` — 10 properties exercising the documented public
+  API only (no internal symbols, no test fixtures)
+- `tests/source_smoke.c` — 6 ASAN/UBSAN-clean properties for the
+  source-buildable subset (used by `make test-asan`)
+- `tests/run_audit.sh` — symbol-level audit (architecture, SONAME, ABI
+  versions, common-symbol overlap, namespace hygiene, no leakage)
+- `src/zupt_sdk_stubs.c` — weak stubs for `zupt_sdk_*` functions whose
+  real implementations live in the zupt CLI tree (allows source build
+  to link cleanly)
+- `prebuilt/libzuptsdk.so.2.0.0` — bundled canonical binary with full
+  ZUPTSDK_1.0 + ZUPTSDK_2.1 ABI including the `easy_*` layer
+- pkg-config support: install ships `zuptsdk.pc` with install-time PREFIX
+- Symbol versioning via `zuptsdk.map`: source build emits ZUPTSDK_1.0
+  symbols only; canonical adds ZUPTSDK_2.1
+- C++ guards on all public headers (`extern "C"` blocks)
+- `make dist` target for source tarball generation
+
+### Inherited from zupt repository (preserved)
+
+- Full ZUPTSDK_1.0 + ZUPTSDK_2.1 ABI (68 exported symbols in canonical)
+- ML-KEM-768 + X25519 hybrid KEM with HKDF-SHA3 combiner
+- XChaCha20-Poly1305 / AES-256-SIV / AES-256-CTR+HMAC AEAD options
+- Argon2id password KDF
+- Streaming AEAD for large objects
+- BLAKE2b-MAC key commitment
+- HPKE-style context binding
+- Anti-fault decapsulation hardening
+- Constant-time x86_64 primitives via Jasmin (AES-NI, X25519, MAC compare)
+- 169 unit tests + 750k cumulative fuzz iterations under ASAN/UBSAN
+- Python ctypes bindings
+
+### Changed (vs. zupt-monorepo SDK builds)
+
+- SONAME bumped from `libzuptsdk.so.1` (zupt 2.1.x) to `libzuptsdk.so.2`
+  (this release). Already shipped in zupt 2.2.0+; the bump reflects the
+  ZUPTSDK_2.1 ABI extension (easy_* layer added)
+- `zupt_crypto_sdk.c` removed from libzuptsdk source list — that file is
+  CLI glue and lives in the zupt repo, not here
+- Source build excludes CLI-only entry points (no `zupt_main.c`)
+- Internal symbol leakage closed via `--version-script=zuptsdk.map`
+  (was: 128 internal `zupt_*`/`vv_*` symbols leaked from monorepo build)
+- `pkg-config` file now regenerated at install time so `PREFIX=` overrides
+  produce correct `.pc` content (previously: hardcoded `/usr/local`)
+- All `.jazz` Jasmin source files relicensed from MIT to AGPL-3.0-or-later
+  (sole-author relicensing; see "License unification" above)
+
+### Fixed
+
+- Stale x86_64 `.o` artifacts no longer ship in tarballs (the
+  `find -delete` rule in clean now respects `prebuilt/`)
+- Build directory race condition during parallel make resolved by
+  ordering all build artifacts under a single `$(BUILD_DIR)` target
+- pkg-config `prefix=` was hardcoded at build time instead of install
+  time — fixed; install now regenerates the .pc using current PREFIX
+
+### Open items (not blocking release, tracked for next minor)
+
+- Open-source `zuptsdk_easy_*` implementations so the from-source
+  library can become a true drop-in replacement for the prebuilt
+- External independent cryptographic audit (cost, not engineering)
+- libFuzzer / AFL++ infrastructure for continuous fuzzing
+- ARM64 prebuilt binary (currently x86_64 only — source build works
+  on both, but the canonical prebuilt is x86_64 only)
+
+---
+
+## ABI compatibility commitment
+
+libzuptsdk follows strict ABI versioning. The contract:
+
+- **No symbol in `ZUPTSDK_1.0` will ever be removed or change behavior.**
+- **No symbol in `ZUPTSDK_1.0` will change its function signature.**
+- **New symbols added in 2.x will go into `ZUPTSDK_2.x` blocks** in the
+  version script. Old code linked against `ZUPTSDK_1.0` keeps working.
+- **The C++ header `zuptsdk.hpp` is a thin RAII wrapper** over the C
+  ABI. C ABI compatibility is what matters; the header may evolve.
+- Any incompatible ABI change is a `libzuptsdk.so.3` event (major
+  SONAME bump, separate parallel-installable library).
+
+---
+
+## Pre-2.0.0 history
+
+Pre-2.0.0 versions of libzuptsdk shipped as part of the monolithic zupt
+repository (`zupt/sdk/`). Their changelog history lives in zupt's
+CHANGELOG.md prior to the v2.2.2 god-tier audit. Notable pre-split
+milestones:
+
+- **1.0.0** (zupt 2.1.0): first stable ABI; ML-KEM-768 + X25519 + HKDF
+- **1.0.1** (zupt 2.1.5): Argon2id parameters tuned per RFC 9106 IETF
+  recommendation
+- **1.1.0** (zupt 2.1.7): BLAKE2b key commitment + HPKE binding added
+- **2.0.0-pre** (zupt 2.2.0): `easy_*` layer added; SONAME bumped
+- **2.0.0** (this release): split out as standalone repo
+
+---
+
+**License**: This document is part of the libzuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).
