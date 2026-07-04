@@ -1,5 +1,5 @@
 /*
- * libzuptsdk implementation — wraps zupt's internal API
+ * libvuptsdk implementation — wraps zupt's internal API
  *
  * Copyright (c) 2026 Cristian Cezar Moisés
  * SPDX-License-Identifier: AGPL-3.0-or-later

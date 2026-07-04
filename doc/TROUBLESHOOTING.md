@@ -1,4 +1,4 @@
-# libzuptsdk troubleshooting
+# libvuptsdk troubleshooting
 
 Common issues and how to diagnose them.
 
@@ -6,7 +6,7 @@ Common issues and how to diagnose them.
 
 ## Build / link errors
 
-### `error while loading shared libraries: libzuptsdk.so.2`
+### `error while loading shared libraries: libvuptsdk.so.2`
 
 The runtime linker can't find the library. Choose one:
 
@@ -15,40 +15,40 @@ The runtime linker can't find the library. Choose one:
 sudo ldconfig
 
 # Permanent (user, no root):
-echo "/path/to/libzuptsdk/lib" >> ~/.ld-library-path
+echo "/path/to/libvuptsdk/lib" >> ~/.ld-library-path
 
 # Per-invocation:
-LD_LIBRARY_PATH=/path/to/libzuptsdk/lib ./your_app
+LD_LIBRARY_PATH=/path/to/libvuptsdk/lib ./your_app
 
 # Build-time bake-in (recommended for portable apps):
-cc app.c -lzuptsdk -Wl,-rpath,/path/to/libzuptsdk/lib
+cc app.c -lvuptsdk -Wl,-rpath,/path/to/libvuptsdk/lib
 ```
 
-### `cannot find -lzuptsdk`
+### `cannot find -lvuptsdk`
 
 The linker can't find the library at link time. Use `pkg-config`:
 
 ```bash
-cc app.c $(pkg-config --cflags --libs zuptsdk) -o app
+cc app.c $(pkg-config --cflags --libs vuptsdk) -o app
 ```
 
 If pkg-config can't find it either, set `PKG_CONFIG_PATH`:
 
 ```bash
-PKG_CONFIG_PATH=/opt/zupt/lib/pkgconfig pkg-config --cflags --libs zuptsdk
+PKG_CONFIG_PATH=/opt/zupt/lib/pkgconfig pkg-config --cflags --libs vuptsdk
 ```
 
 ### `undefined reference to zuptsdk_easy_encrypt`
 
-You're linking against the source-only build (`libzuptsdk-base.so.2`)
+You're linking against the source-only build (`libvuptsdk-base.so.2`)
 which lacks the `easy_*` layer. The `easy_*` functions live in the
-canonical prebuilt only. Link against `libzuptsdk.so.2` (no `-base`):
+canonical prebuilt only. Link against `libvuptsdk.so.2` (no `-base`):
 
 ```bash
 # Wrong (source build, missing easy_*):
-cc app.c -lzuptsdk-base
+cc app.c -lvuptsdk-base
 # Right (canonical, has full ABI):
-cc app.c -lzuptsdk
+cc app.c -lvuptsdk
 ```
 
 `make install` always installs the canonical, so this is only an issue
@@ -59,18 +59,18 @@ if you're using the in-tree build artifacts directly.
 The compiler can't find the headers. Use pkg-config:
 
 ```bash
-cc -I$(pkg-config --variable=includedir zuptsdk) app.c ...
+cc -I$(pkg-config --variable=includedir vuptsdk) app.c ...
 # or simpler:
-cc $(pkg-config --cflags zuptsdk) app.c ...
+cc $(pkg-config --cflags vuptsdk) app.c ...
 ```
 
-### Python: `RuntimeError: libzuptsdk shared library not found`
+### Python: `RuntimeError: libvuptsdk shared library not found`
 
-The Python bindings tried `libzuptsdk.so.2`, `libzuptsdk.so`, and
-`ctypes.util.find_library('zuptsdk')` and none worked. Set:
+The Python bindings tried `libvuptsdk.so.2`, `libvuptsdk.so`, and
+`ctypes.util.find_library('vuptsdk')` and none worked. Set:
 
 ```bash
-export ZUPTSDK_LIBRARY=/path/to/libzuptsdk.so.2.0.0
+export ZUPTSDK_LIBRARY=/path/to/libvuptsdk.so.2.0.0
 ```
 
 Or call `make install` to put it in `/usr/local/lib`, then `sudo ldconfig`.
@@ -90,18 +90,18 @@ The MAC verification step failed. Three possible causes:
 1. **The blob has been tampered with**, even by a single bit.
 2. **You're using the wrong private key**. Cross-check by comparing the
    pubkey fingerprint of the privkey to the pubkey used by the sender.
-3. **The blob was encrypted with a different version of libzuptsdk**
+3. **The blob was encrypted with a different version of libvuptsdk**
    (rare — the format includes a version byte that gets checked first).
 
 ### `decrypt: format error (-11)`
 
-The input is not a valid libzuptsdk blob. It may be:
+The input is not a valid libvuptsdk blob. It may be:
 - An empty file
 - Truncated mid-transfer
 - Compressed / wrapped in some other format
-- A regular text file (libzuptsdk blobs are binary)
+- A regular text file (libvuptsdk blobs are binary)
 
-Check the first 8 bytes — they should start with the libzuptsdk magic
+Check the first 8 bytes — they should start with the libvuptsdk magic
 header.
 
 ### Decryption is slow
@@ -189,7 +189,7 @@ source build (which lacks `easy_*`). Track the open item in AUDIT.md.
 
 ## Memory leaks
 
-If ASAN/Valgrind reports leaks from libzuptsdk, the most common cause is
+If ASAN/Valgrind reports leaks from libvuptsdk, the most common cause is
 forgetting to free output buffers from the `easy_*` API:
 
 ```c
@@ -231,8 +231,8 @@ If you've ruled out the above and believe you've found a real bug:
 5. **For security issues**: email `zupt@riseup.net` directly. Do not file
    public GitHub issues.
 
-For non-security bugs: <https://github.com/cristiancmoises/libzuptsdk/issues>
+For non-security bugs: <https://github.com/cristiancmoises/libvuptsdk/issues>
 
 ---
 
-**License**: This document is part of the libzuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](../LICENSE).
+**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](../LICENSE).

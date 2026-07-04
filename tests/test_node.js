@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * zuptsdk Node.js binding test suite
+ * vuptsdk Node.js binding test suite
  * SPDX-License-Identifier: AGPL-3.0-or-later
  * Copyright (c) 2026 Cristian Cezar Moisés
  *
  * Run with:
- *     ZUPTSDK_LIBRARY=/path/to/libzuptsdk.so.2.0.0 \
+ *     ZUPTSDK_LIBRARY=/path/to/libvuptsdk.so.2.0.0 \
  *     node tests/test_node.js
  *
  * Requires: npm install koffi
@@ -18,7 +18,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 // Resolve bindings path
-const bindingsPath = path.join(__dirname, '..', 'bindings', 'node', 'zuptsdk.js');
+const bindingsPath = path.join(__dirname, '..', 'bindings', 'node', 'vuptsdk.js');
 const zupt = require(bindingsPath);
 
 let pass = 0, fail = 0;
@@ -36,7 +36,7 @@ function test(name, fn) {
 }
 
 console.log('═'.repeat(60));
-console.log(`  zuptsdk Node.js bindings test — version ${zupt.version()}`);
+console.log(`  vuptsdk Node.js bindings test — version ${zupt.version()}`);
 console.log('═'.repeat(60));
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zupt-test-'));

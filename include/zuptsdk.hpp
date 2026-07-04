@@ -1,4 +1,4 @@
-// libzuptsdk C++17 header — RAII wrappers, exception-based error handling
+// libvuptsdk C++17 header — RAII wrappers, exception-based error handling
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #ifndef ZUPTSDK_HPP
 #define ZUPTSDK_HPP
@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace zuptsdk {
+namespace vuptsdk {
 
 class Error : public std::runtime_error {
     int code_;
@@ -225,6 +225,6 @@ public:
 
 inline std::string version() { return zuptsdk_version_string(); }
 
-} // namespace zuptsdk
+} // namespace vuptsdk
 
 #endif // ZUPTSDK_HPP

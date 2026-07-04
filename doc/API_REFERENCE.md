@@ -1,4 +1,4 @@
-# libzuptsdk API reference
+# libvuptsdk API reference
 
 This document describes every public function with full signature, parameter
 semantics, return values, and a runnable example.
@@ -331,7 +331,7 @@ typedef struct {
 int zuptsdk_set_allocator(const zuptsdk_allocator_t *alloc);
 ```
 
-Replace the global heap allocator. Must be called before any other libzuptsdk
+Replace the global heap allocator. Must be called before any other libvuptsdk
 function. Useful for:
 - Embedded systems with custom heaps
 - Memory-pool allocation for low-latency
@@ -408,4 +408,4 @@ ownership transfer.
 
 ---
 
-**License**: This document is part of the libzuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](../LICENSE).
+**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](../LICENSE).

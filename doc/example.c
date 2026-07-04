@@ -1,10 +1,10 @@
 /*
- * libzuptsdk example: compress a file with a password, then extract it.
+ * libvuptsdk example: compress a file with a password, then extract it.
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Build: gcc example.c $(pkg-config --cflags --libs zuptsdk) -o example
+ * Build: gcc example.c $(pkg-config --cflags --libs vuptsdk) -o example
  *        # or, before installation:
- *        gcc example.c -I sdk/include -L sdk/build -lzuptsdk \
+ *        gcc example.c -I sdk/include -L sdk/build -lvuptsdk \
  *            -Wl,-rpath,'$ORIGIN/../build' -o example
  */
 #include <zuptsdk.h>
@@ -22,7 +22,7 @@ int main(void) {
     /* 1. Always check ABI compatibility at startup */
     int rc = zuptsdk_version_check(1, 0, 0);
     if (rc) return die("version_check", rc);
-    printf("libzuptsdk %s\n\n", zuptsdk_version_string());
+    printf("libvuptsdk %s\n\n", zuptsdk_version_string());
 
     /* 2. Create a context (cheap; one per worker thread is fine) */
     zuptsdk_ctx_t *ctx = NULL;

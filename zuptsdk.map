@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Cristian Cezar Moisés
 #
-# libzuptsdk symbol version script
+# libvuptsdk symbol version script
 # All public symbols are namespaced under ZUPTSDK_1.0.
 # Anything not listed here is hidden via `local: *;` — guaranteed no leakage
 # of internal zupt_*, vv_*, or other symbols from the static libraries we
@@ -10,7 +10,7 @@
 # Adding new symbols in v1.x: add a new ZUPTSDK_1.x block that inherits from
 # the previous one. NEVER modify or remove symbols within an existing block.
 #
-# Verification: after build, `nm -D --defined-only libzuptsdk.so | grep ' T '`
+# Verification: after build, `nm -D --defined-only libvuptsdk.so | grep ' T '`
 # must show ONLY symbols listed below.
 
 ZUPTSDK_1.0 {
@@ -100,6 +100,6 @@ ZUPTSDK_1.0 {
 
 # Note: ZUPTSDK_2.1 ABI (easy_* convenience layer + metrics) is NOT
 # emitted by the source-buildable library. Those symbols live only in
-# the canonical prebuilt artifact at prebuilt/libzuptsdk.so.2.0.0
+# the canonical prebuilt artifact at prebuilt/libvuptsdk.so.2.0.0
 # which is shipped alongside this source tree. See README.md ABI
 # section for details.

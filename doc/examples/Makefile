@@ -14,15 +14,15 @@ CXX     ?= c++
 CFLAGS  ?= -std=c11 -Wall -Wextra -O2
 CXXFLAGS ?= -std=c++17 -Wall -Wextra -O2
 
-# pkg-config will pick up zuptsdk.pc if installed.
+# pkg-config will pick up vuptsdk.pc if installed.
 # For in-tree testing without `make install`, set:
-#   LIB_PATH=/path/to/libzuptsdk-root  (containing include/ and prebuilt/)
+#   LIB_PATH=/path/to/libvuptsdk-root  (containing include/ and prebuilt/)
 ifneq ($(LIB_PATH),)
   CPPFLAGS += -I$(LIB_PATH)/include
   LDFLAGS  += -L$(LIB_PATH)/prebuilt -L$(LIB_PATH)/lib \
               -Wl,-rpath,$(LIB_PATH)/prebuilt -Wl,-rpath,$(LIB_PATH)/lib
 endif
-LIBS = -lzuptsdk
+LIBS = -lvuptsdk
 
 C_EXAMPLES   = 01_pq_keypair 02_password_mode 03_field_encryption 04_file_encryption
 CPP_EXAMPLES = 05_cpp_raii
@@ -54,7 +54,7 @@ test: all
 python:
 	@echo "═══ Running Python examples ═══"
 ifneq ($(LIB_PATH),)
-	ZUPTSDK_LIBRARY=$(LIB_PATH)/prebuilt/libzuptsdk.so.2.0.0 python3 06_python.py
+	ZUPTSDK_LIBRARY=$(LIB_PATH)/prebuilt/libvuptsdk.so.2.0.0 python3 06_python.py
 else
 	python3 06_python.py
 endif

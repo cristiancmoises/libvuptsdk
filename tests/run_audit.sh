@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Cristian Cezar Moisés
-# libzuptsdk audit script — verifies that the source build is a subset
+# libvuptsdk audit script — verifies that the source build is a subset
 # of the canonical prebuilt binary (no symbol drift).
 
 set -e
@@ -13,10 +13,10 @@ chk() {
     else echo "  ✗ $2"; FAIL=$((FAIL+1)); fi
 }
 
-echo "  [libzuptsdk audit — source build vs canonical binary]"
+echo "  [libvuptsdk audit — source build vs canonical binary]"
 
-SOURCE_LIB="build/libzuptsdk-base.so.2.0.0"
-CANON_LIB="prebuilt/libzuptsdk.so.2.0.0"
+SOURCE_LIB="build/libvuptsdk-base.so.2.0.0"
+CANON_LIB="prebuilt/libvuptsdk.so.2.0.0"
 
 # A1. Both libraries exist
 [ -f "$SOURCE_LIB" ] && chk PASS "Source build artifact present" || chk FAIL "Source build artifact present"
@@ -30,12 +30,12 @@ CAN_ARCH=$(file "$CANON_LIB" | grep -oE "x86-64|aarch64|ARM64" | head -1)
 
 # A3. SONAME format correct
 SRC_SONAME=$(readelf -d "$SOURCE_LIB" 2>/dev/null | grep SONAME | awk '{print $NF}' | tr -d '[]')
-echo "$SRC_SONAME" | grep -q "libzuptsdk-base.so.2" \
+echo "$SRC_SONAME" | grep -q "libvuptsdk-base.so.2" \
     && chk PASS "Source SONAME = $SRC_SONAME" \
     || chk FAIL "Source SONAME wrong: $SRC_SONAME"
 
 CAN_SONAME=$(readelf -d "$CANON_LIB" 2>/dev/null | grep SONAME | awk '{print $NF}' | tr -d '[]')
-echo "$CAN_SONAME" | grep -q "libzuptsdk.so.2" \
+echo "$CAN_SONAME" | grep -q "libvuptsdk.so.2" \
     && chk PASS "Canonical SONAME = $CAN_SONAME" \
     || chk FAIL "Canonical SONAME wrong: $CAN_SONAME"
 
@@ -50,12 +50,12 @@ echo "    Canonical exports: $CAN_EXPORTS"
     || chk FAIL "Canonical ABI too small ($CAN_EXPORTS exports)"
 
 # A5. Compute the symbol overlap and report honestly
-nm -D --defined-only "$SOURCE_LIB" 2>/dev/null | awk '$2=="T"{print $3}' | sed 's/@.*//' | sort -u > /tmp/_libzuptsdk_src_syms
-nm -D --defined-only "$CANON_LIB"  2>/dev/null | awk '$2=="T"{print $3}' | sed 's/@.*//' | sort -u > /tmp/_libzuptsdk_can_syms
+nm -D --defined-only "$SOURCE_LIB" 2>/dev/null | awk '$2=="T"{print $3}' | sed 's/@.*//' | sort -u > /tmp/_libvuptsdk_src_syms
+nm -D --defined-only "$CANON_LIB"  2>/dev/null | awk '$2=="T"{print $3}' | sed 's/@.*//' | sort -u > /tmp/_libvuptsdk_can_syms
 
-SOURCE_ONLY=$(comm -23 /tmp/_libzuptsdk_src_syms /tmp/_libzuptsdk_can_syms | wc -l)
-CANON_ONLY=$(comm -13  /tmp/_libzuptsdk_src_syms /tmp/_libzuptsdk_can_syms | wc -l)
-COMMON=$(    comm -12  /tmp/_libzuptsdk_src_syms /tmp/_libzuptsdk_can_syms | wc -l)
+SOURCE_ONLY=$(comm -23 /tmp/_libvuptsdk_src_syms /tmp/_libvuptsdk_can_syms | wc -l)
+CANON_ONLY=$(comm -13  /tmp/_libvuptsdk_src_syms /tmp/_libvuptsdk_can_syms | wc -l)
+COMMON=$(    comm -12  /tmp/_libvuptsdk_src_syms /tmp/_libvuptsdk_can_syms | wc -l)
 
 echo "    Common symbols (overlap): $COMMON"
 echo "    Source-only (extended API in source build): $SOURCE_ONLY"
@@ -66,7 +66,7 @@ echo "    Canonical-only (easy_* layer not in source): $CANON_ONLY"
     || chk FAIL "Source and canonical do not share core ABI"
 
 # All canonical-only symbols must be in the public zuptsdk_ namespace
-NON_PUBLIC=$(comm -13 /tmp/_libzuptsdk_src_syms /tmp/_libzuptsdk_can_syms | grep -v "^zuptsdk_" | grep -v "^zuptsdk__" | wc -l)
+NON_PUBLIC=$(comm -13 /tmp/_libvuptsdk_src_syms /tmp/_libvuptsdk_can_syms | grep -v "^zuptsdk_" | grep -v "^zuptsdk__" | wc -l)
 [ "$NON_PUBLIC" -eq 0 ] && chk PASS "All canonical-only symbols are in public zuptsdk_ namespace" \
     || chk FAIL "Canonical has $NON_PUBLIC symbols outside public namespace"
 
@@ -90,7 +90,7 @@ SRC_LEAKED=$(nm -D --defined-only "$SOURCE_LIB" 2>/dev/null | awk '$2=="T"{print
     || chk FAIL "Source build leaks $SRC_LEAKED private symbols"
 
 # Cleanup
-rm -f /tmp/_libzuptsdk_src_syms /tmp/_libzuptsdk_can_syms
+rm -f /tmp/_libvuptsdk_src_syms /tmp/_libvuptsdk_can_syms
 
 echo
 echo "  ───────────────────────────────────────"

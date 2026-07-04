@@ -1,6 +1,6 @@
-# libzuptsdk changelog
+# libvuptsdk changelog
 
-All notable changes to libzuptsdk are documented in this file. The
+All notable changes to libvuptsdk are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 at the ABI level (see README.md "Versioning").
@@ -67,7 +67,7 @@ functions are internal (hidden by the version script). Applies to the
 
 ### Known limitation (prebuilt)
 
-- The canonical `prebuilt/libzuptsdk.so.2.0.0` is **not** rebuilt from this
+- The canonical `prebuilt/libvuptsdk.so.2.0.0` is **not** rebuilt from this
   patched source and must be regenerated + re-audited before it can be claimed
   FIPS 203 conformant. Archives/keys created by a pre-fix build do **not**
   interoperate with a post-fix build (the corrected KEM derives a different
@@ -99,7 +99,7 @@ cumulative fuzz iteration count to **942,800+**. All green.
    symbol versions, dangerous symbols, strip status).
 5. **Performance benchmarks** (`bench/bench_throughput.c`) — wall-clock
    median + p99 latency and sustained throughput. **First measured-and-
-   reproducible perf characterization for libzuptsdk.**
+   reproducible perf characterization for libvuptsdk.**
 
 **New documentation**:
 
@@ -139,12 +139,12 @@ make bench             # Performance benchmark
 
 ### Repository established
 
-libzuptsdk has been split out of the monolithic `zupt` repository into
+libvuptsdk has been split out of the monolithic `zupt` repository into
 a standalone library project. This change improves:
 
 - **Audit hygiene**: the SDK now has its own scoped CHANGELOG and AUDIT
   files. Downstream library users can answer "what's been verified in
-  libzuptsdk specifically?" without wading through CLI-side history.
+  libvuptsdk specifically?" without wading through CLI-side history.
 - **Release cadence**: SDK versions can ship independently. CLI bug
   fixes no longer drag the SDK along, and SDK feature additions don't
   block CLI patch releases.
@@ -191,7 +191,7 @@ release. Findings and fixes:
    `zupt_mlkem768_selftest` was missing prototype (made `static
    __attribute__((unused))`); `mkstemp` warning in smoke_test
    (added `_DEFAULT_SOURCE`/`_XOPEN_SOURCE` defines).
-3. **Symbol leakage** — source-built `libzuptsdk-base.so` exports 55
+3. **Symbol leakage** — source-built `libvuptsdk-base.so` exports 55
    symbols, all `zuptsdk_*` namespaced, zero internal leakage (no
    `zupt_*`, `vv_*`, or `decompress_*` exported). Verified by `nm -D`.
 4. **C++ ABI compatibility** — all 9 public-API headers
@@ -209,7 +209,7 @@ release. Findings and fixes:
    regenerated at install time using current `$(PREFIX)`,
    `$(LIBDIR)`, `$(INCLUDEDIR)`. Verified: `make install
    PREFIX=/opt/zupt` produces a `.pc` with `/opt/zupt` paths, and
-   `pkg-config --cflags --libs zuptsdk` reports them correctly.
+   `pkg-config --cflags --libs vuptsdk` reports them correctly.
    Previously: hardcoded `/usr/local`.
 8. **Cross-compile arch detection** — `$(CC) -dumpmachine` correctly
    selects NEON SIMD flags when `CC=aarch64-linux-gnu-gcc` is passed.
@@ -236,9 +236,9 @@ release. Findings and fixes:
 - `src/zupt_sdk_stubs.c` — weak stubs for `zupt_sdk_*` functions whose
   real implementations live in the zupt CLI tree (allows source build
   to link cleanly)
-- `prebuilt/libzuptsdk.so.2.0.0` — bundled canonical binary with full
+- `prebuilt/libvuptsdk.so.2.0.0` — bundled canonical binary with full
   ZUPTSDK_1.0 + ZUPTSDK_2.1 ABI including the `easy_*` layer
-- pkg-config support: install ships `zuptsdk.pc` with install-time PREFIX
+- pkg-config support: install ships `vuptsdk.pc` with install-time PREFIX
 - Symbol versioning via `zuptsdk.map`: source build emits ZUPTSDK_1.0
   symbols only; canonical adds ZUPTSDK_2.1
 - C++ guards on all public headers (`extern "C"` blocks)
@@ -260,10 +260,10 @@ release. Findings and fixes:
 
 ### Changed (vs. zupt-monorepo SDK builds)
 
-- SONAME bumped from `libzuptsdk.so.1` (zupt 2.1.x) to `libzuptsdk.so.2`
+- SONAME bumped from `libvuptsdk.so.1` (zupt 2.1.x) to `libvuptsdk.so.2`
   (this release). Already shipped in zupt 2.2.0+; the bump reflects the
   ZUPTSDK_2.1 ABI extension (easy_* layer added)
-- `zupt_crypto_sdk.c` removed from libzuptsdk source list — that file is
+- `zupt_crypto_sdk.c` removed from libvuptsdk source list — that file is
   CLI glue and lives in the zupt repo, not here
 - Source build excludes CLI-only entry points (no `zupt_main.c`)
 - Internal symbol leakage closed via `--version-script=zuptsdk.map`
@@ -295,7 +295,7 @@ release. Findings and fixes:
 
 ## ABI compatibility commitment
 
-libzuptsdk follows strict ABI versioning. The contract:
+libvuptsdk follows strict ABI versioning. The contract:
 
 - **No symbol in `ZUPTSDK_1.0` will ever be removed or change behavior.**
 - **No symbol in `ZUPTSDK_1.0` will change its function signature.**
@@ -303,14 +303,14 @@ libzuptsdk follows strict ABI versioning. The contract:
   version script. Old code linked against `ZUPTSDK_1.0` keeps working.
 - **The C++ header `zuptsdk.hpp` is a thin RAII wrapper** over the C
   ABI. C ABI compatibility is what matters; the header may evolve.
-- Any incompatible ABI change is a `libzuptsdk.so.3` event (major
+- Any incompatible ABI change is a `libvuptsdk.so.3` event (major
   SONAME bump, separate parallel-installable library).
 
 ---
 
 ## Pre-2.0.0 history
 
-Pre-2.0.0 versions of libzuptsdk shipped as part of the monolithic zupt
+Pre-2.0.0 versions of libvuptsdk shipped as part of the monolithic zupt
 repository (`zupt/sdk/`). Their changelog history lives in zupt's
 CHANGELOG.md prior to the v2.2.2 god-tier audit. Notable pre-split
 milestones:
@@ -324,4 +324,4 @@ milestones:
 
 ---
 
-**License**: This document is part of the libzuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).
+**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).

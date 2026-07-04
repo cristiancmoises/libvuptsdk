@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 [package]
-name = "zuptsdk"
+name = "vuptsdk"
 version = "2.0.0"
 edition = "2021"
 authors = ["Cristian Cezar Moisés <zupt@riseup.net>"]
 license = "AGPL-3.0-or-later"
-description = "Rust bindings for libzuptsdk: post-quantum hybrid cryptography"
-repository = "https://github.com/cristiancmoises/libzuptsdk"
-homepage = "https://github.com/cristiancmoises/libzuptsdk"
+description = "Rust bindings for libvuptsdk: post-quantum hybrid cryptography"
+repository = "https://github.com/cristiancmoises/libvuptsdk"
+homepage = "https://github.com/cristiancmoises/libvuptsdk"
 keywords = ["cryptography", "post-quantum", "ml-kem", "x25519", "argon2"]
 categories = ["cryptography", "api-bindings"]
 
 [lib]
-name = "zuptsdk"
+name = "vuptsdk"
 
 [build-dependencies]
 pkg-config = "0.3"

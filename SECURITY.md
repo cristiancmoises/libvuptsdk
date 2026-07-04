@@ -1,4 +1,4 @@
-# libzuptsdk security policy
+# libvuptsdk security policy
 
 ## Reporting vulnerabilities
 
@@ -9,13 +9,13 @@ reasonable time for a fix before public disclosure (90 days standard,
 sooner for already-public information, longer for complex multi-party
 coordination).
 
-PGP key: TBD (will be published at https://github.com/cristiancmoises/libzuptsdk/blob/main/SECURITY.md once finalized)
+PGP key: TBD (will be published at https://github.com/cristiancmoises/libvuptsdk/blob/main/SECURITY.md once finalized)
 
 ---
 
 ## Threat model
 
-libzuptsdk is designed to defend against the following adversaries:
+libvuptsdk is designed to defend against the following adversaries:
 
 | Adversary | Capability | Mitigation |
 |---|---|---|
@@ -178,7 +178,7 @@ it explicitly rather than claim audits we haven't paid for.
    two defects in `src/zupt_mlkem.c` and is verified against the official
    NIST ACVP vectors (80/80) and two independent implementations. That
    verification covers the **from-source** library. The canonical
-   `prebuilt/libzuptsdk.so.2.0.0` predates the fix and must be regenerated
+   `prebuilt/libvuptsdk.so.2.0.0` predates the fix and must be regenerated
    from the patched tree (and re-audited) before it can be claimed
    conformant. **Migration hazard:** an ML-KEM-hybrid archive or keypair
    produced by a *pre-fix* build will not interoperate with a *post-fix*
@@ -198,7 +198,7 @@ it explicitly rather than claim audits we haven't paid for.
 
 ## Defense-in-depth practices
 
-Beyond the cryptographic primitives, libzuptsdk implements:
+Beyond the cryptographic primitives, libvuptsdk implements:
 
 - `mlock()` on private-key buffers so they don't swap to disk
 - Explicit `zupt_secure_zero()` on free for all key material
@@ -220,7 +220,7 @@ The following table reports the actual hardening properties of the
 shipped binaries, verified by `tools/checksec_lib.sh` (a checksec-style
 audit script).
 
-### Source build (`libzuptsdk-base.so.2.0.0`)
+### Source build (`libvuptsdk-base.so.2.0.0`)
 
 | Property | Status | Notes |
 |---|---|---|
@@ -233,7 +233,7 @@ audit script).
 | Symbol versioning | ✓ ZUPTSDK_1.0 | Stable ABI guarantees |
 | Dangerous symbols | ✓ none | No `gets`/`system`/`exec*` |
 
-### Canonical prebuilt (`libzuptsdk.so.2.0.0`)
+### Canonical prebuilt (`libvuptsdk.so.2.0.0`)
 
 | Property | Status | Notes |
 |---|---|---|
@@ -290,7 +290,7 @@ of valid decrypt** — strong evidence that:
 
 The truncated-blob case is **expected** to differ — the parse layer
 rejects malformed blobs before any crypto is performed. This leaks "this
-isn't even a libzuptsdk blob" but does not leak any information about a
+isn't even a libvuptsdk blob" but does not leak any information about a
 properly-formatted blob's contents or key.
 
 ### Constant-time primitives (Jasmin-verified)
@@ -362,7 +362,7 @@ This is a basic-correctness check — a non-zero result would indicate a
 catastrophic implementation bug (key material leaking into output). The
 0-leak result is consistent with a correctly-implemented hybrid KEM.
 
-Note: the libzuptsdk privkey file format embeds the public key twice (per
+Note: the libvuptsdk privkey file format embeds the public key twice (per
 FIPS 203 — `dk_KEM = (dk_PKE, ek_KEM, H(ek_KEM), z)`). The test
 specifically excludes pubkey-equivalent bytes from the "true secret"
 analysis to avoid false positives.
@@ -395,7 +395,7 @@ The parser robustly rejects all malformed input.
 | zupt 2.2 SDK fuzz round 2 | 2025 | — | 500,000 | 0 crashes |
 | zupt 2.2.1 ASAN sweep | 2025 | 169 | — | 0 mem errors |
 | zupt 2.2.2 god-tier | 2025 | 169 | 1,000 | 0 crashes |
-| **libzuptsdk 2.0.0 (this audit)** | **2026** | **30 + 13 + extensions** | **+62,800** | **all green** |
+| **libvuptsdk 2.0.0 (this audit)** | **2026** | **30 + 13 + extensions** | **+62,800** | **all green** |
 | **Cumulative** | | **212+** | **813,800** | **all green** |
 
 This release adds:
@@ -408,4 +408,4 @@ This release adds:
 
 ---
 
-**License**: This document is part of the libzuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).
+**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).

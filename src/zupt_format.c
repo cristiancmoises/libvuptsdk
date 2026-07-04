@@ -297,13 +297,13 @@ zupt_error_t write_enc_header(FILE *out, zupt_archive_header_t *hdr,
     hdr->encryption_header_off = (uint64_t)ftello(out);
 
     if (opts->sdk_mode && opts->pq_mode) {
-        /* ─── SDK V2 PQ MODE (libzuptsdk: HKDF combiner + commitment + HPKE) ─── */
+        /* ─── SDK V2 PQ MODE (libvuptsdk: HKDF combiner + commitment + HPKE) ─── */
         hdr->global_flags |= ZUPT_FLAG_PQ_HYBRID;
 
         uint8_t enc_hdr_buf[1500];
         size_t enc_hdr_len = 0;
         if (!opts->quiet)
-            fprintf(stderr, "  PQ key encapsulation via libzuptsdk (HKDF-SHA3 + commitment + HPKE)...\n");
+            fprintf(stderr, "  PQ key encapsulation via libvuptsdk (HKDF-SHA3 + commitment + HPKE)...\n");
         if (zupt_sdk_hybrid_encrypt_init(&opts->keyring, opts->keyfile,
                                           enc_hdr_buf, &enc_hdr_len) != 0) {
             fprintf(stderr, "Error: SDK PQ key encapsulation failed.\n");

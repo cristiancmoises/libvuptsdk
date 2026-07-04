@@ -1,5 +1,5 @@
 /*
- * libzuptsdk smoke test
+ * libvuptsdk smoke test
  * Copyright (c) 2026 Cristian Cezar Moisés
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
@@ -90,7 +90,7 @@ static void test_easy_pq_roundtrip(void) {
 
     if (zuptsdk_easy_keygen(pubf, privf) != 0) { FAIL("keygen"); unlink(privf); unlink(pubf); return; }
 
-    const char *plaintext = "hello libzuptsdk PQ hybrid encryption!";
+    const char *plaintext = "hello libvuptsdk PQ hybrid encryption!";
     uint8_t *blob = NULL; size_t blob_sz = 0;
     int rc = zuptsdk_easy_encrypt(pubf, (const uint8_t *)plaintext,
                                    strlen(plaintext), &blob, &blob_sz);
@@ -197,7 +197,7 @@ static void test_easy_password_roundtrip(void) {
 
 int main(void) {
     fprintf(stderr, "═══════════════════════════════════════════════════════════\n");
-    fprintf(stderr, "  libzuptsdk %s smoke test\n", zuptsdk_version_string());
+    fprintf(stderr, "  libvuptsdk %s smoke test\n", zuptsdk_version_string());
     fprintf(stderr, "═══════════════════════════════════════════════════════════\n");
 
     test_version();

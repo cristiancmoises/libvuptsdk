@@ -120,7 +120,7 @@ int main(void) {
     printf("  should have similar medians (within scheduler noise, ~50%% of each other).\n");
     printf("  Truncated-parse failures are expected to be FASTER (early reject) — \n");
     printf("  this is an information leak only if the truncation point is\n");
-    printf("  ciphertext-content-dependent, which it is not in libzuptsdk.\n");
+    printf("  ciphertext-content-dependent, which it is not in libvuptsdk.\n");
 
     free(blob); unlink(pub); unlink(priv);
     return 0;

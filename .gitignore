@@ -9,6 +9,11 @@ kd
 rk_*.hex
 sdk_*.hex
 
+# ...but the canonical prebuilt library is tracked
+!prebuilt/
+!prebuilt/*.so
+!prebuilt/*.so.*
+
 # Python caches
 __pycache__/
 *.pyc

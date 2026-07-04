@@ -1,13 +1,13 @@
 #!/bin/bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Cristian Cezar Moisés
-# Build libzuptsdk SRPM tarball.
-# Produces: /tmp/libzuptsdk-2.0.0.srpm.tar.gz containing:
-#           SPECS/libzuptsdk.spec  + SOURCES/libzuptsdk-2.0.0.tar.gz
+# Build libvuptsdk SRPM tarball.
+# Produces: /tmp/libvuptsdk-2.0.0.srpm.tar.gz containing:
+#           SPECS/libvuptsdk.spec  + SOURCES/libvuptsdk-2.0.0.tar.gz
 # 
 # To build the actual RPM on a system with rpmbuild:
-#   tar xzf libzuptsdk-2.0.0.srpm.tar.gz
-#   rpmbuild -bb SPECS/libzuptsdk.spec
+#   tar xzf libvuptsdk-2.0.0.srpm.tar.gz
+#   rpmbuild -bb SPECS/libvuptsdk.spec
 set -e
 cd "$(dirname "$0")/.."
 
@@ -16,7 +16,7 @@ SOVERSION="${SOVERSION:-2}"
 
 # 1. Build source tarball
 make dist
-SRC_TAR="dist/libzuptsdk-${VERSION}.tar.gz"
+SRC_TAR="dist/libvuptsdk-${VERSION}.tar.gz"
 
 if [ ! -f "$SRC_TAR" ]; then
     echo "Source tarball not built: $SRC_TAR"; exit 1
@@ -26,36 +26,36 @@ fi
 SPEC_DIR=$(mktemp -d)
 mkdir -p "$SPEC_DIR/SPECS" "$SPEC_DIR/SOURCES"
 
-cat > "$SPEC_DIR/SPECS/libzuptsdk.spec" <<SPEC
+cat > "$SPEC_DIR/SPECS/libvuptsdk.spec" <<SPEC
 %define version    ${VERSION}
 %define soversion  ${SOVERSION}
 
-Name:           libzuptsdk
+Name:           libvuptsdk
 Version:        %{version}
 Release:        1%{?dist}
 Summary:        Post-quantum hybrid cryptography library
 License:        AGPLv3+
-URL:            https://github.com/cristiancmoises/libzuptsdk
-Source0:        libzuptsdk-%{version}.tar.gz
+URL:            https://github.com/cristiancmoises/libvuptsdk
+Source0:        libvuptsdk-%{version}.tar.gz
 
 BuildRequires:  gcc make pkgconfig
 Requires:       glibc
 
 %description
-libzuptsdk provides a stable C ABI for post-quantum hybrid encryption
+libvuptsdk provides a stable C ABI for post-quantum hybrid encryption
 (ML-KEM-768 + X25519), authenticated encryption (XChaCha20-Poly1305 or
 AES-256-SIV), Argon2id password mode, and streaming AEAD.
 
 %package devel
-Summary:        Development files for libzuptsdk
+Summary:        Development files for libvuptsdk
 Requires:       %{name}%{?_isa} = %{version}-%{release}
 
 %description devel
 Headers, static archive, pkg-config file, and development docs for
-libzuptsdk. Install this to build applications against libzuptsdk.
+libvuptsdk. Install this to build applications against libvuptsdk.
 
 %prep
-%setup -q -n libzuptsdk-%{version}
+%setup -q -n libvuptsdk-%{version}
 
 %build
 make %{?_smp_mflags}
@@ -67,15 +67,15 @@ make install DESTDIR=%{buildroot} PREFIX=/usr LIBDIR=/usr/%{_lib}
 %postun -p /sbin/ldconfig
 
 %files
-/usr/%{_lib}/libzuptsdk.so.%{version}
-/usr/%{_lib}/libzuptsdk.so.%{soversion}
+/usr/%{_lib}/libvuptsdk.so.%{version}
+/usr/%{_lib}/libvuptsdk.so.%{soversion}
 %doc README.md CHANGELOG.md SECURITY.md
 %license LICENSE
 
 %files devel
-/usr/%{_lib}/libzuptsdk.so
-/usr/%{_lib}/libzuptsdk.a
-/usr/%{_lib}/pkgconfig/zuptsdk.pc
+/usr/%{_lib}/libvuptsdk.so
+/usr/%{_lib}/libvuptsdk.a
+/usr/%{_lib}/pkgconfig/vuptsdk.pc
 /usr/include/zuptsdk.h
 /usr/include/zuptsdk_easy.h
 /usr/include/zuptsdk.hpp
@@ -89,7 +89,7 @@ make install DESTDIR=%{buildroot} PREFIX=/usr LIBDIR=/usr/%{_lib}
 
 %changelog
 * Wed Apr 29 2026 Cristian Cezar Moisés <zupt@riseup.net> - %{version}-1
-- libzuptsdk split out as standalone repo
+- libvuptsdk split out as standalone repo
 - Two-library build (source + canonical prebuilt)
 - See CHANGELOG.md for details
 SPEC
@@ -98,7 +98,7 @@ SPEC
 cp "$SRC_TAR" "$SPEC_DIR/SOURCES/"
 
 # 4. Build SRPM-equivalent tarball
-SRPM_TAR="/tmp/libzuptsdk-${VERSION}.srpm.tar.gz"
+SRPM_TAR="/tmp/libvuptsdk-${VERSION}.srpm.tar.gz"
 cd "$SPEC_DIR" && tar -czf "$SRPM_TAR" SPECS SOURCES
 rm -rf "$SPEC_DIR"
 
@@ -106,11 +106,11 @@ if command -v rpmbuild >/dev/null 2>&1; then
     echo "Building actual RPM with rpmbuild..."
     RPM_TOPDIR=$(mktemp -d)
     tar xzf "$SRPM_TAR" -C "$RPM_TOPDIR"
-    rpmbuild --define "_topdir $RPM_TOPDIR" -bb "$RPM_TOPDIR/SPECS/libzuptsdk.spec"
+    rpmbuild --define "_topdir $RPM_TOPDIR" -bb "$RPM_TOPDIR/SPECS/libvuptsdk.spec"
     cp "$RPM_TOPDIR"/RPMS/x86_64/*.rpm /tmp/
     rm -rf "$RPM_TOPDIR"
     echo "Built RPM(s) in /tmp"
 else
     echo "rpmbuild not available — SRPM-equivalent tarball at: $SRPM_TAR"
-    echo "  Distros: tar -xzf $SRPM_TAR && rpmbuild -bb SPECS/libzuptsdk.spec"
+    echo "  Distros: tar -xzf $SRPM_TAR && rpmbuild -bb SPECS/libvuptsdk.spec"
 fi

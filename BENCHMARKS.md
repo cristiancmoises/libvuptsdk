@@ -1,7 +1,7 @@
-# libzuptsdk performance characterization
+# libvuptsdk performance characterization
 
 Last measured: 2026-04-29
-Library: `libzuptsdk-2.0.0` (canonical x86_64 prebuilt)
+Library: `libvuptsdk-2.0.0` (canonical x86_64 prebuilt)
 Bench source: [`bench/bench_throughput.c`](bench/bench_throughput.c)
 
 This document records measured performance, the methodology used to obtain
@@ -118,7 +118,7 @@ this drops to 100-200 μs; in cloud VMs with no AES-NI it can rise to 1-2 ms.
 ```bash
 make
 cc -O2 -Iinclude bench/bench_throughput.c \
-   prebuilt/libzuptsdk.so.2.0.0 \
+   prebuilt/libvuptsdk.so.2.0.0 \
    -Wl,-rpath,$PWD/prebuilt \
    -o /tmp/bench -lpthread -lm
 LD_LIBRARY_PATH=prebuilt /tmp/bench
@@ -133,12 +133,12 @@ across runs on the same machine.
 
 | Library | PQ keygen | PQ encrypt 1KB | Argon2id 64MB |
 |---|---|---|---|
-| **libzuptsdk 2.0.0** (this lib) | 470 μs | 1.0 MB/s | 1.1 sec |
+| **libvuptsdk 2.0.0** (this lib) | 470 μs | 1.0 MB/s | 1.1 sec |
 | libsodium (X25519 only, no PQ) | 80 μs | 12 MB/s | N/A |
 | OQS-OpenSSL (ML-KEM-768) | ~500 μs | similar | N/A |
 
-libzuptsdk's PQ overhead is comparable to OQS-OpenSSL (the standard PQ
-benchmark). The asymmetric wins of libzuptsdk are: integrated key commitment
+libvuptsdk's PQ overhead is comparable to OQS-OpenSSL (the standard PQ
+benchmark). The asymmetric wins of libvuptsdk are: integrated key commitment
 (BLAKE2b-MAC), constant-time AES-NI via Jasmin, and a high-level `easy_*`
 API that handles all the protocol composition correctly.
 
@@ -156,4 +156,4 @@ API that handles all the protocol composition correctly.
 
 ---
 
-**License**: This document is part of the libzuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).
+**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).

@@ -14,7 +14,7 @@ They are deliberately small and self-contained; no test framework needed.
 ```bash
 # After `make install` or with prebuilt:
 cc -O2 -Iinclude tools/tamper_fuzz.c \
-   prebuilt/libzuptsdk.so.2.0.0 -o /tmp/tf -lpthread -lm
+   prebuilt/libvuptsdk.so.2.0.0 -o /tmp/tf -lpthread -lm
 LD_LIBRARY_PATH=prebuilt /tmp/tf
 ```
 
