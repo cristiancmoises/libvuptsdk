@@ -151,6 +151,14 @@ static void keccak_squeeze(zupt_keccak_ctx *ctx, uint8_t *out, size_t len) {
     }
 }
 
+/* Zero a buffer so the compiler cannot elide the store (defense-in-depth for
+ * sponge state that absorbed secret material). Local to keep this file free of
+ * extra dependencies. */
+static void keccak_wipe(void *p, size_t n) {
+    volatile uint8_t *v = (volatile uint8_t *)p;
+    while (n--) *v++ = 0;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
  * SHA3-256: rate=136 bytes (1088 bits), capacity=512 bits
  * ═══════════════════════════════════════════════════════════════════ */
@@ -168,6 +176,7 @@ void zupt_sha3_256(const uint8_t *data, size_t len, uint8_t out[32]) {
     keccak_absorb(&ctx, data, len);
     keccak_finalize(&ctx);
     keccak_squeeze(&ctx, out, 32);
+    keccak_wipe(&ctx, sizeof(ctx));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -187,6 +196,7 @@ void zupt_sha3_512(const uint8_t *data, size_t len, uint8_t out[64]) {
     keccak_absorb(&ctx, data, len);
     keccak_finalize(&ctx);
     keccak_squeeze(&ctx, out, 64);
+    keccak_wipe(&ctx, sizeof(ctx));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -206,6 +216,7 @@ void zupt_shake128(const uint8_t *data, size_t dlen, uint8_t *out, size_t olen) 
     keccak_absorb(&ctx, data, dlen);
     keccak_finalize(&ctx);
     keccak_squeeze(&ctx, out, olen);
+    keccak_wipe(&ctx, sizeof(ctx));
 }
 
 void zupt_shake128_init(zupt_keccak_ctx *ctx)    { keccak_init(ctx, 168, 0x1F); }
@@ -234,6 +245,7 @@ void zupt_shake256(const uint8_t *data, size_t dlen, uint8_t *out, size_t olen) 
     keccak_absorb(&ctx, data, dlen);
     keccak_finalize(&ctx);
     keccak_squeeze(&ctx, out, olen);
+    keccak_wipe(&ctx, sizeof(ctx));
 }
 
 void zupt_shake256_init(zupt_keccak_ctx *ctx)    { keccak_init(ctx, 136, 0x1F); }

@@ -3,7 +3,16 @@
  * Copyright (c) 2026 Cristian Cezar Moisés
  *
  * ZUPT - AES-256 Block Cipher (FIPS 197)
- * Pure C, constant-time T-table implementation.
+ * Pure-C portable reference using a byte-indexed S-box.
+ *
+ * SIDE-CHANNEL SCOPE (be precise): this pure-C path is NOT constant-time —
+ * SubBytes and the key schedule index the S-box with key/state-dependent
+ * bytes, which is a cache-timing side channel on a shared core. The
+ * constant-time AES used in production is the Jasmin-verified AES-NI backend
+ * selected by -DZUPT_USE_JASMIN in zupt_aes256_ctr(); this file is the
+ * portable fallback for builds without it. For untrusted-coresidency threat
+ * models, build with the Jasmin backend or use the XChaCha20-Poly1305 path.
+ * See SECURITY.md ("Side-channel posture").
  * FRAMA-C: ACSL-annotated (v2.0.0)
  */
 #include "zupt.h"

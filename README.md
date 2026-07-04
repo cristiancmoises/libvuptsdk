@@ -13,7 +13,7 @@
 
 | Concern | What libzuptsdk gives you |
 |---|---|
-| **Quantum-safe** | ML-KEM-768 (FIPS 203, NIST 2024-standardized) hybrid with X25519 ECDH. Both must fall to break a message. |
+| **Quantum-safe** | ML-KEM-768 (FIPS 203, NIST 2024-standardized) hybrid with X25519 ECDH. Both must fall to break a message. The from-source KEM is verified conformant against the official NIST ACVP vectors (**80/80**) and two independent implementations — see [ML-KEM-768 conformance](#ml-kem-768-conformance-status). |
 | **Misuse-resistant** | Default AEAD (XChaCha20-Poly1305) uses random 24-byte nonces — no nonce-reuse risk. AES-256-SIV available for nonce-misuse-resistant mode. |
 | **Committing AEAD** | BLAKE2b key-commitment defeats the multi-key partitioning attacks that affect raw AEAD constructions (Albertini et al. 2022). |
 | **Constant-time** | Critical primitives (AES, X25519, MAC compare, ML-KEM cmov-select) are written in [Jasmin](https://github.com/jasmin-lang/jasmin) and verified constant-time by the type system. |
@@ -387,7 +387,8 @@ All functions return `0` on success, non-zero on failure. Use `zuptsdk_strerror(
 | -4 | out of memory |
 | -10 | authentication failure (MAC reject — tampered or wrong key) |
 | -11 | format error (not a libzuptsdk blob, or version too new) |
-| -12 | KEM decapsulation failure |
+
+The authoritative code list is `zuptsdk_error_t` in [`include/zuptsdk.h`](include/zuptsdk.h). Note there is **no** distinct "KEM decapsulation failure" code: ML-KEM-768 uses FIPS 203 implicit rejection, so a wrong key or tampered ciphertext always surfaces as the authentication/MAC failure above, never as a KEM-level error.
 
 ---
 
@@ -408,6 +409,42 @@ See [`SECURITY.md`](SECURITY.md) for the full threat model and protocol diagrams
 
 ---
 
+# ML-KEM-768 conformance status
+
+The ML-KEM-768 implementation in `src/zupt_mlkem.c` is verified conformant to
+**FIPS 203** by the [`conformance-suite/`](conformance-suite/) gate, wired into
+CI at [`.forgejo/workflows/mlkem-conformance.yaml`](.forgejo/workflows/mlkem-conformance.yaml):
+
+| Check | Result |
+|---|---|
+| Official NIST ACVP vectors (keyGen, encaps, decaps, §7.2/§7.3 key checks) | **80/80** |
+| Differential vs kyber-py 1.2.0 (both directions) | **100/100 ×2** |
+| Differential vs RustCrypto `ml-kem` 0.2.3 (both directions) | **50/50 ×2** |
+| Self-roundtrip / tampered-ciphertext rejection | **1000/1000 / 1000/1000** |
+| Constant-time (dudect + ctgrind) | clean — see [`CT_VERIFICATION.md`](CT_VERIFICATION.md) |
+
+Run it yourself:
+
+```bash
+gcc -O2 -Iinclude -Isrc conformance-suite/kat_mlkem768_acvp.c \
+    src/zupt_mlkem.c src/zupt_keccak.c src/zupt_sha256.c -o katz
+cd conformance-suite && python3 run_kats.py ../katz     # expect 80/80
+```
+
+> **Two important caveats.**
+> 1. **This conformance holds for the from-source library.** The canonical
+>    `prebuilt/libzuptsdk.so.2.0.0` predates the 2026-07-02 fix
+>    (see [`MLKEM_CONFORMANCE_FIX.md`](MLKEM_CONFORMANCE_FIX.md)) and is **not**
+>    rebuilt from this patched source — it must be regenerated and re-audited
+>    before it can be claimed conformant.
+> 2. **Migration hazard.** An ML-KEM-hybrid archive or keypair produced by a
+>    *pre-fix* build will **not** interoperate with a *post-fix* build: the
+>    corrected KEM derives a different (now-standard) shared secret, so the AEAD
+>    MAC fails and the archive reads as tampered/wrong-key. Re-encrypt affected
+>    data with a post-fix build.
+
+---
+
 # Source vs prebuilt
 
 This repository ships **two libraries**, an intentional design:
@@ -418,6 +455,8 @@ This repository ships **two libraries**, an intentional design:
 | `libzuptsdk.so` | bundled prebuilt | 68 (full ZUPTSDK_1.0 + 2.1, including `easy_*`) | **Production use; what `make install` installs and downstream apps link against** |
 
 **Why ship a prebuilt at all?** The `easy_*` convenience layer (`zuptsdk_easy_encrypt`, etc.) and a few v2.1 functions don't have source code in this public tree for legacy reasons. The prebuilt binary is the audited, production-deployed artifact; the from-source library proves the rest of the codebase is buildable and a strict subset.
+
+> ⚠️ **ML-KEM-768 conformance & the prebuilt.** The FIPS 203 conformance fix and its 80/80 ACVP verification apply to the **from-source** library. The prebuilt has not been rebuilt from the patched source; regenerate and re-audit it before relying on it for standards-conformant, interoperable ML-KEM. See [ML-KEM-768 conformance status](#ml-kem-768-conformance-status).
 
 The `make audit` target verifies on every build that:
 
@@ -453,6 +492,8 @@ Test suite — **30/30 properties pass**:
 - 1 license audit (every file has AGPL SPDX)
 
 Plus 13 Python binding tests, 12 Node.js binding tests, 4 Go binding tests, and 5 Rust binding tests — all working code in `bindings/`.
+
+Separately, the **ML-KEM-768 conformance gate** ([`conformance-suite/`](conformance-suite/)) verifies FIPS 203 compliance of the from-source KEM: **80/80** official NIST ACVP vectors, byte-for-byte differentials against two independent implementations (both directions), and a dudect + ctgrind constant-time check. See [ML-KEM-768 conformance status](#ml-kem-768-conformance-status).
 
 ---
 
@@ -493,6 +534,9 @@ See [`SECURITY.md`](SECURITY.md) for the full threat model, cryptographic constr
 
 - External independent crypto audit (cost, not engineering — ~$30-60k)
 - The `zuptsdk_easy_*` source — only the binary has been audited
+- **The canonical prebuilt has not been rebuilt from the post-2026-07-02
+  ML-KEM source**; its ML-KEM conformance is not yet re-verified (the
+  from-source library is — 80/80 ACVP). See [ML-KEM-768 conformance status](#ml-kem-768-conformance-status).
 
 ---
 

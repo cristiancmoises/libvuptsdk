@@ -341,7 +341,10 @@ static void kpke_keygen(uint8_t pk[1184], uint8_t sk_pke[1152], const uint8_t d[
     polyvec Ahat[MLKEM_K];
     for (int i = 0; i < MLKEM_K; i++)
         for (int j = 0; j < MLKEM_K; j++)
-            poly_uniform(Ahat[i][j], rho, (uint8_t)i, (uint8_t)j);
+            /* FIPS 203 Alg 13 (K-PKE.KeyGen): A_hat[i][j] = SampleNTT(rho ‖ j ‖ i).
+             * The two index bytes are appended in (j, i) order. (i,j) here
+             * transposed the matrix vs the standard and broke interop. */
+            poly_uniform(Ahat[i][j], rho, (uint8_t)j, (uint8_t)i);
 
     /* Sample secret vector s */
     polyvec s;
@@ -377,6 +380,7 @@ static void kpke_keygen(uint8_t pk[1184], uint8_t sk_pke[1152], const uint8_t d[
     polyvec_tobytes(sk_pke, s);
 
     zupt_secure_wipe(buf, sizeof(buf));
+    zupt_secure_wipe(dk, sizeof(dk));   /* holds seed d ‖ k */
     zupt_secure_wipe(s, sizeof(s));
     zupt_secure_wipe(e, sizeof(e));
 }
@@ -394,7 +398,9 @@ static void kpke_encrypt(uint8_t ct[1088], const uint8_t pk[1184],
     polyvec AT[MLKEM_K];
     for (int i = 0; i < MLKEM_K; i++)
         for (int j = 0; j < MLKEM_K; j++)
-            poly_uniform(AT[i][j], rho, (uint8_t)j, (uint8_t)i);
+            /* FIPS 203 Alg 14 (K-PKE.Encrypt) uses A^T: (A^T)[i][j] = A[j][i],
+             * generated as SampleNTT(rho ‖ i ‖ j) — appended (i, j). */
+            poly_uniform(AT[i][j], rho, (uint8_t)i, (uint8_t)j);
 
     /* Sample r_vec, e1, e2 */
     polyvec r_vec;
@@ -441,6 +447,11 @@ static void kpke_encrypt(uint8_t ct[1088], const uint8_t pk[1184],
     zupt_secure_wipe(r_vec, sizeof(r_vec));
     zupt_secure_wipe(e1, sizeof(e1));
     zupt_secure_wipe(&e2, sizeof(e2));
+    /* mp/v/u are derived from the (in decaps) secret message m'; wipe them
+     * so no message-correlated polynomial survives on the stack. */
+    zupt_secure_wipe(mp, sizeof(mp));
+    zupt_secure_wipe(&v, sizeof(v));
+    zupt_secure_wipe(u, sizeof(u));
 }
 
 /* K-PKE decrypt */
@@ -472,6 +483,10 @@ static void kpke_decrypt(uint8_t m[32], const uint8_t ct[1088],
     }
 
     zupt_secure_wipe(s_hat, sizeof(s_hat));
+    /* w is the recovered (secret) message polynomial; v/u derive from it. */
+    zupt_secure_wipe(w, sizeof(w));
+    zupt_secure_wipe(&v, sizeof(v));
+    zupt_secure_wipe(u, sizeof(u));
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -524,6 +539,12 @@ int zupt_mlkem768_keygen(uint8_t pk[1184], uint8_t sk[2400]) {
 */
 int zupt_mlkem768_encaps(uint8_t ct[1088], uint8_t ss[32],
                           const uint8_t pk[1184]) {
+    /* FIPS 203 §7.2 input validation (modulus check): reject an encapsulation
+     * key whose 12-bit coefficients are not all reduced mod q. A malformed ek
+     * must be rejected rather than silently encapsulated against. */
+    if (zupt_mlkem768_check_ek(pk, 1184) != 0)
+        return -1;
+
     /* m ← random 32 bytes */
     uint8_t m[32];
     zupt_random_bytes(m, 32);
@@ -541,18 +562,15 @@ int zupt_mlkem768_encaps(uint8_t ct[1088], uint8_t ss[32],
     /* Encrypt m under pk with randomness r */
     kpke_encrypt(ct, pk, m, kr + 32);
 
-    /* K = KDF(kr[0:32] ‖ H(ct)) */
-    uint8_t h_ct[32];
-    zupt_sha3_256(ct, 1088, h_ct);
-    uint8_t kdf_in[64];
-    memcpy(kdf_in, kr, 32);
-    memcpy(kdf_in + 32, h_ct, 32);
-    zupt_shake256(kdf_in, 64, ss, 32);
+    /* FIPS 203 Alg 17 (ML-KEM.Encaps): the shared secret is K = kr[0:32]
+     * DIRECTLY. The pre-final Kyber round-3 step  ss = KDF(K ‖ H(c))  was
+     * removed by NIST in the final standard; applying it breaks interop and
+     * conformance (ciphertext already matched byte-for-byte). */
+    memcpy(ss, kr, 32);
 
     zupt_secure_wipe(m, 32);
     zupt_secure_wipe(kr, 64);
     zupt_secure_wipe(kr_input, 64);
-    zupt_secure_wipe(kdf_in, 64);
     return 0;
 }
 
@@ -597,22 +615,19 @@ int zupt_mlkem768_decaps(uint8_t ss[32], const uint8_t ct[1088],
     for (int i = 0; i < 1088; i++)
         diff |= ct[i] ^ ct_prime[i];
 
-    /* Compute success key: K = KDF(kr[0:32] ‖ H(ct)) */
-    uint8_t h_ct[32];
-    zupt_sha3_256(ct, 1088, h_ct);
-
-    uint8_t kdf_success[64];
-    memcpy(kdf_success, kr, 32);
-    memcpy(kdf_success + 32, h_ct, 32);
+    /* FIPS 203 Alg 18 (ML-KEM.Decaps):
+     *   success  K' = kr[0:32]  (G(m' ‖ h) high half), used directly.
+     *   reject   K_bar = J(z ‖ c) = SHAKE256(z ‖ c) over the FULL ciphertext.
+     * Both are always computed; a constant-time cmov picks between them so
+     * an invalid ciphertext leaks nothing through control flow or timing. */
     uint8_t ss_success[32];
-    zupt_shake256(kdf_success, 64, ss_success, 32);
+    memcpy(ss_success, kr, 32);
 
-    /* Compute rejection key: K_bar = KDF(z ‖ H(ct)) */
-    uint8_t kdf_reject[64];
-    memcpy(kdf_reject, z, 32);
-    memcpy(kdf_reject + 32, h_ct, 32);
+    uint8_t zc[32 + 1088];
+    memcpy(zc, z, 32);
+    memcpy(zc + 32, ct, 1088);
     uint8_t ss_reject[32];
-    zupt_shake256(kdf_reject, 64, ss_reject, 32);
+    zupt_shake256(zc, sizeof(zc), ss_reject, 32);
 
     /* CT-REQUIRED: Select success or reject key without branching.
      * If diff == 0 (ct matches): use ss_success.
@@ -634,11 +649,52 @@ int zupt_mlkem768_decaps(uint8_t ss[32], const uint8_t ct[1088],
     zupt_secure_wipe(kr, 64);
     zupt_secure_wipe(kr_input, 64);
     zupt_secure_wipe(ct_prime, sizeof(ct_prime));
-    zupt_secure_wipe(kdf_success, 64);
-    zupt_secure_wipe(kdf_reject, 64);
+    zupt_secure_wipe(zc, sizeof(zc));
     zupt_secure_wipe(ss_success, 32);
     zupt_secure_wipe(ss_reject, 32);
     return 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * FIPS 203 key-validation checks (§7.2 / §7.3)
+ *
+ * These implement the "input checking" the standard requires before a key
+ * is used, and back the ACVP encapsulation/decapsulation KeyCheck vectors.
+ * They perform no secret-dependent branching on ciphertext material; the
+ * decision is a structural property of a (semi-)public key, computed with a
+ * constant-time byte compare for the hash check.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* §7.2 modulus check: an encapsulation key is valid iff it is exactly 1184
+ * bytes and every one of its 768 12-bit coefficients is reduced mod q, i.e.
+ * ByteEncode12(ByteDecode12(ek[0:1152])) == ek[0:1152]. Returns 0 if valid. */
+int zupt_mlkem768_check_ek(const uint8_t *ek, size_t len) {
+    if (ek == NULL || len != 1184)
+        return -1;
+    for (int i = 0; i < MLKEM_K * 384 / 3; i++) {
+        uint16_t c0 = (uint16_t)( (uint16_t)ek[3*i]        | ((uint16_t)(ek[3*i+1] & 0x0F) << 8) );
+        uint16_t c1 = (uint16_t)( (uint16_t)(ek[3*i+1] >> 4) | ((uint16_t)ek[3*i+2]        << 4) );
+        if (c0 >= MLKEM_Q || c1 >= MLKEM_Q)
+            return -1;
+    }
+    return 0;
+}
+
+/* §7.3 hash check: a decapsulation key is valid iff it is exactly 2400 bytes
+ * and the embedded H(ek) matches SHA3-256 of the embedded encapsulation key,
+ * i.e. dk = dk_pke ‖ ek ‖ H(ek) ‖ z with H(ek) consistent. Returns 0 if valid. */
+int zupt_mlkem768_check_dk(const uint8_t *dk, size_t len) {
+    if (dk == NULL || len != 2400)
+        return -1;
+    const uint8_t *ek    = dk + 1152;          /* embedded encapsulation key   */
+    const uint8_t *h_ek  = dk + 1152 + 1184;   /* stored H(ek)                 */
+    uint8_t h[32];
+    zupt_sha3_256(ek, 1184, h);
+    uint8_t diff = 0;
+    for (int i = 0; i < 32; i++)
+        diff |= h[i] ^ h_ek[i];
+    zupt_secure_wipe(h, sizeof(h));
+    return diff == 0 ? 0 : -1;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

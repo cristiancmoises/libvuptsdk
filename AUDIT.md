@@ -330,12 +330,24 @@ The hybrid KEM construction is implemented per the diagram in
 
 ### KEM correctness — ML-KEM-768
 
+> **History (be honest about it).** Through v2.0.0 this table cited "NIST FIPS
+> 203 KAT" for the roundtrip row, but the KEM was in fact only exercised by an
+> internal self-test (encaps/decaps agree with each other) — it was **not** run
+> against the official ACVP vectors and, as later found, failed **all 60** of
+> them. The 2026-07-02 conformance fix (`MLKEM_CONFORMANCE_FIX.md`) corrected
+> the two underlying defects; the table below now reflects verification against
+> the **official NIST ACVP vectors** via [`conformance-suite/`](conformance-suite/).
+> This applies to the from-source library; the prebuilt is not yet rebuilt from
+> the fixed source (see SECURITY.md limitation 6).
+
 | Property | Verified by | Result |
 |---|---|---|
-| Encaps/Decaps roundtrip | NIST FIPS 203 known-answer-test vectors (KAT) | ✓ |
-| Implicit rejection (FO transform) | self-test (TEST 4 in `zupt_mlkem.c`) | ✓ |
+| KeyGen / Encaps / Decaps | official NIST ACVP vectors (`conformance-suite/run_kats.py`) | ✓ 80/80 |
+| §7.2/§7.3 key checks | ACVP encapsulation/decapsulationKeyCheck vectors | ✓ 20/20 |
+| Interop (independent impls) | differential vs kyber-py 1.2.0 & RustCrypto `ml-kem` 0.2.3, both directions | ✓ |
+| Implicit rejection (FO transform) | 1000/1000 tampered-ciphertext rejections; ACVP decaps VAL vectors | ✓ |
 | Shared secret length = 32 bytes | API contract, asserted in self-test | ✓ |
-| Constant-time ciphertext compare | `jasmin/zupt_mlkem_select.jazz` (CT-typed) | ✓ |
+| Constant-time decaps | dudect + ctgrind (`CT_VERIFICATION.md`); cmov select `jasmin/zupt_mlkem_select.jazz` | ✓ |
 
 ### ECDH correctness — X25519
 

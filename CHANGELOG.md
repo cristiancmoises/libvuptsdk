@@ -7,6 +7,74 @@ at the ABI level (see README.md "Versioning").
 
 ---
 
+## [2.0.1] — 2026-07-04
+
+Security-correctness release for the ML-KEM-768 layer. No public ABI change
+(`ZUPTSDK_1.0` / `ZUPTSDK_2.1` symbol sets are untouched); the new key-check
+functions are internal (hidden by the version script). Applies to the
+**from-source** library — see the prebuilt caveat below and in SECURITY.md.
+
+### Fixed
+
+- **security(mlkem): ML-KEM-768 now conforms to FIPS 203 and interoperates.**
+  Two defects made the prior implementation self-consistent but non-standard
+  (0/60 official NIST ACVP vectors; could not interoperate with any conforming
+  implementation):
+  1. The K-PKE matrix was generated transposed — index bytes appended as
+     `(i,j)` instead of the FIPS 203 `(j,i)` for `Â[i][j]` (and the matching
+     `A^T` convention in encrypt). Fixed at both sampling sites.
+  2. The shared secret used the pre-final Kyber round-3 KDF
+     `SHAKE256(K ‖ H(c))` instead of the FIPS 203 final construction: `K` from
+     `G(m ‖ H(ek))` used directly, with implicit-rejection value `J(z ‖ c)`
+     over the full ciphertext.
+  Post-fix: **60/60** core ACVP KATs; byte-for-byte differential agreement with
+  kyber-py 1.2.0 and RustCrypto `ml-kem` 0.2.3 in both directions; 1000/1000
+  self-roundtrips; ASan/UBSan clean. No secret-dependent branch/index
+  introduced; the constant-time `cmov` selection is preserved. Full root-cause
+  analysis in `MLKEM_CONFORMANCE_FIX.md`.
+- **docs(security): corrected the false "constant-time T-table" claim on the
+  pure-C AES-256.** `src/zupt_aes256.c` uses a byte-indexed S-box (a cache-timing
+  side channel); the constant-time AES is the Jasmin AES-NI backend built with
+  `-DZUPT_USE_JASMIN`. Scope now documented accurately in the source header and
+  SECURITY.md.
+
+### Added
+
+- **FIPS 203 §7.2 / §7.3 input validation.** `zupt_mlkem768_encaps` now performs
+  the mandated encapsulation-key modulus check and rejects malformed keys;
+  `zupt_mlkem768_check_ek` / `zupt_mlkem768_check_dk` expose the §7.2 / §7.3
+  checks. This lifts ACVP coverage to the full **80/80** (adds the 10
+  encapsulationKeyCheck + 10 decapsulationKeyCheck vectors that were previously
+  skipped). Valid keys are unaffected (0 valid keys rejected across 1000 trials).
+- **`conformance-suite/`** — a blocking ACVP-KAT + differential + constant-time
+  CI gate (`.forgejo/workflows/mlkem-conformance.yaml`) so this defect class
+  cannot recur. Acceptance: ACVP 80/80 **and** both differentials byte-equal in
+  both directions **and** the dudect/ctgrind gate clean.
+
+### Hardened
+
+- **Secret wiping** of ML-KEM stack temporaries that previously survived: the
+  `d ‖ k` seed in K-PKE keygen, and the message/noise polynomials (`m`, `w`,
+  `u`, `v`) in K-PKE encrypt/decrypt. One-shot SHA3/SHAKE now wipe the sponge
+  state after squeezing.
+- **Conformance-suite robustness** (it is a blocking gate, so a false pass is a
+  security bug): `run_kats.py` now fails loudly if the executed vector count is
+  not 80 (empty/truncated files can no longer report "0/0 → pass"); the KAT
+  driver validates argument count and exits non-zero on an unknown mode; the CT
+  runner requires proof valgrind actually executed (no silent pass when valgrind
+  is absent or the harness crashes) and separates a definite dudect leak
+  (blocking) from statistical WARN-zone noise (advisory).
+
+### Known limitation (prebuilt)
+
+- The canonical `prebuilt/libzuptsdk.so.2.0.0` is **not** rebuilt from this
+  patched source and must be regenerated + re-audited before it can be claimed
+  FIPS 203 conformant. Archives/keys created by a pre-fix build do **not**
+  interoperate with a post-fix build (the corrected KEM derives a different
+  shared secret → AEAD MAC fails). See SECURITY.md limitation 6.
+
+---
+
 ## [2.0.0] — 2026-04-29
 
 ### Extended verification sprint (audit-extended; v2.0.0 final)

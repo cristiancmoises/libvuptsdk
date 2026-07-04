@@ -1,0 +1,39 @@
+# BLOCKING conformance gate for ML-KEM-768 (FIPS 203).
+# The 0/60-ACVP defect class cannot recur once this job is red-on-fail.
+# Acceptance: ACVP 80/80 (keyGen+encaps+decaps+encap/decap KeyCheck) AND both
+# differentials byte-equal in both directions AND the constant-time gate clean.
+name: mlkem-conformance
+on: [push, pull_request]
+jobs:
+  acvp-kat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build KAT driver
+        run: |
+          gcc -O2 -Iinclude -Isrc conformance-suite/kat_mlkem768_acvp.c \
+              src/zupt_mlkem.c src/zupt_keccak.c src/zupt_sha256.c -o katz
+      - name: Run official NIST ACVP vectors (must be 80/80)
+        run: cd conformance-suite && python3 run_kats.py ../katz
+
+  differential-kyberpy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build differential helper
+        run: sh conformance-suite/build_kd.sh
+      - name: Install kyber-py (independent FIPS 203 implementation)
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "kyber-py==1.2.0"
+      - name: Differential vs kyber-py (both directions, must be 100/100 x2)
+        run: python3 conformance-suite/differential_kyberpy.py ./kd
+
+  constant-time:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+      - name: dudect + ctgrind (fail on any secret-dependent branch)
+        run: sh conformance-suite/ct/run_ct.sh

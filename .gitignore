@@ -1,0 +1,21 @@
+# Build artifacts
+build/
+*.o
+*.so
+*.so.*
+*.a
+katz
+kd
+rk_*.hex
+sdk_*.hex
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Conformance-suite Rust differential
+conformance-suite/differential_rustcrypto/target/
+conformance-suite/differential_rustcrypto/Cargo.lock
+
+# Delivery archives
+*.zip

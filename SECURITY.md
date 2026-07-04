@@ -172,6 +172,27 @@ it explicitly rather than claim audits we haven't paid for.
    higher requirements should wait for ML-KEM-1024 (planned 2.1.x).
 5. **x86_64 prebuilt only**. AArch64 builds from source but the
    canonical prebuilt is x86_64 only currently. Tracked.
+6. **ML-KEM-768 FIPS 203 conformance is a from-source property; the
+   shipped prebuilt is not yet rebuilt from the fixed source.** The
+   2026-07-02 conformance fix (see `MLKEM_CONFORMANCE_FIX.md`) corrected
+   two defects in `src/zupt_mlkem.c` and is verified against the official
+   NIST ACVP vectors (80/80) and two independent implementations. That
+   verification covers the **from-source** library. The canonical
+   `prebuilt/libzuptsdk.so.2.0.0` predates the fix and must be regenerated
+   from the patched tree (and re-audited) before it can be claimed
+   conformant. **Migration hazard:** an ML-KEM-hybrid archive or keypair
+   produced by a *pre-fix* build will not interoperate with a *post-fix*
+   build — decapsulation re-derives a different (now-correct) matrix and
+   shared secret, so the AEAD MAC fails and the archive reads as
+   "tampered / wrong key". Re-encrypt affected data with a post-fix build.
+7. **The pure-C AES-256 path is not constant-time.** `src/zupt_aes256.c`
+   uses a byte-indexed S-box (SubBytes and key schedule), which is a
+   cache-timing side channel against an attacker sharing a core. This path
+   is the portable fallback used when the library is built **without**
+   `-DZUPT_USE_JASMIN`; the Jasmin-verified AES-NI backend is
+   constant-time. For untrusted-coresidency threat models, build with the
+   Jasmin backend or use the XChaCha20-Poly1305 AEAD (the default for new
+   archives), which has no secret-dependent table lookups.
 
 ---
 
@@ -258,7 +279,12 @@ of valid decrypt** — strong evidence that:
 1. The AEAD MAC compare is constant-time (no early-exit on first
    mismatched byte).
 2. The KEM decapsulation runs to completion regardless of input validity
-   (FIPS 203 implicit-rejection mechanism is intact).
+   (the implicit-rejection mechanism runs both key branches and selects
+   with a constant-time cmov). These figures were measured on the
+   canonical prebuilt; **FIPS 203 conformance of the derived shared secret
+   is a from-source property** verified by `conformance-suite/` (80/80
+   ACVP) — see limitation 6 above. The *timing* property (run-to-completion,
+   no secret-dependent branch) holds for both the pre- and post-fix KDF.
 3. A network-observing attacker cannot distinguish "wrong key" from
    "tampered ciphertext" by timing alone.
 
@@ -284,10 +310,33 @@ constant-time type-checking:
 Compiled with `jasminc 2026.03.0`. The Jasmin type system formally
 proves no operation in these primitives has data-dependent timing.
 
+**These primitives are active only when the library is built with
+`-DZUPT_USE_JASMIN`.** In a default build the AES path is the pure-C
+byte-indexed S-box (see limitation 7), which is *not* constant-time; the
+ML-KEM cmov select and X25519 cswap have constant-time pure-C equivalents
+that are always used. Enable the Jasmin backend for constant-time AES.
+
 The **non-CT-critical surrounding code** (key schedule setup, format
 parsing, heap allocation) is not Jasmin-verified — it operates on data
 whose timing leakage does not affect cryptographic security per
 public-key cryptography conventions.
+
+### ML-KEM constant-time posture and division portability
+
+The ML-KEM-768 decapsulation is verified constant-time on the shipped
+toolchain by two independent methods (dudect statistical timing, max |t|
+≈ 1–2.5 well under the 4.5 threshold; ctgrind/valgrind taint-tracking,
+zero secret-dependent branches). See `CT_VERIFICATION.md` and
+`conformance-suite/ct/`. One portability caveat, disclosed honestly:
+the polynomial compression/encoding in `src/zupt_mlkem.c` divides and
+reduces by the constant `q = 3329` on secret-derived data
+(KyberSlash-class, CVE-2024-37880 family). On x86-64 with gcc/clang these
+compile to multiply-by-reciprocal (constant time), which is why the
+tooling above is clean. On targets whose compiler emits a hardware
+variable-latency divide (some `-O0` builds; certain embedded ARM cores),
+the source is not constant-time-portable. Hardening to the upstream
+multiply-shift form is tracked for a future release; the current shipped
+target (x86-64) is unaffected.
 
 ---
 
