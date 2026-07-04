@@ -6,7 +6,7 @@ differentials byte-equal in both directions AND the constant-time gate clean.
 
 **Scope:** this gate exercises the **from-source** library (`src/zupt_mlkem.c`),
 which is the code the fix corrected. It does **not** test the canonical
-`prebuilt/libzuptsdk.so.2.0.0`, which predates the fix and is not rebuilt from
+`prebuilt/libvuptsdk.so.2.0.0`, which predates the fix and is not rebuilt from
 this source — regenerate and re-run against the prebuilt before claiming it
 conformant. The 80 vectors are 25 keyGen + 25 encaps + 10 decaps + 10
 encapsulationKeyCheck (§7.2) + 10 decapsulationKeyCheck (§7.3).

@@ -1,5 +1,5 @@
 /**
- * zuptsdk — Node.js bindings for libzuptsdk
+ * vuptsdk — Node.js bindings for libvuptsdk
  *
  * Copyright (c) 2026 Cristian Cezar Moisés
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -9,14 +9,14 @@
  *
  * Quick start
  * -----------
- *     const zupt = require('./zuptsdk');
+ *     const zupt = require('./vuptsdk');
  *     zupt.keygen('alice.pub', 'alice.priv');
  *     const blob = zupt.encrypt('alice.pub', Buffer.from('Hello'));
  *     const plain = zupt.decrypt('alice.priv', blob);
  *     console.log(plain.toString()); // "Hello"
  *
  * Override library path:
- *     ZUPTSDK_LIBRARY=/path/to/libzuptsdk.so node app.js
+ *     ZUPTSDK_LIBRARY=/path/to/libvuptsdk.so node app.js
  */
 'use strict';
 
@@ -24,8 +24,8 @@ const koffi = require('koffi');
 
 // ─── Library loading ──────────────────────────────────────────────
 const libPath = process.env.ZUPTSDK_LIBRARY ||
-    'libzuptsdk.so.2' ||
-    koffi.util.findLibrary('zuptsdk');
+    'libvuptsdk.so.2' ||
+    koffi.util.findLibrary('vuptsdk');
 
 const lib = koffi.load(libPath);
 
@@ -79,8 +79,8 @@ class ZuptError extends Error {
     constructor(code, op = '') {
         const msg = c_strerror(code);
         const full = op
-            ? `${op}: libzuptsdk error ${code}: ${msg}`
-            : `libzuptsdk error ${code}: ${msg}`;
+            ? `${op}: libvuptsdk error ${code}: ${msg}`
+            : `libvuptsdk error ${code}: ${msg}`;
         super(full);
         this.name = 'ZuptError';
         this.code = code;

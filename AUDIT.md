@@ -1,11 +1,11 @@
-# libzuptsdk audit report
+# libvuptsdk audit report
 
 **Version**: 2.0.0
 **Date**: 2026-04-29
 **Author**: Cristian Cezar Moisés <sac@securityops.co>
 **Methodology**: hard verification + adversarial testing
 
-This document records what has been verified about libzuptsdk and what
+This document records what has been verified about libvuptsdk and what
 remains as open items. It is updated on every release.
 
 ---
@@ -14,7 +14,7 @@ remains as open items. It is updated on every release.
 
 | Aspect | Status | Evidence |
 |---|---|---|
-| Source build (subset) — buildable from this repo | ✓ | `make` produces `libzuptsdk-base.so.2.0.0`, 55 symbols |
+| Source build (subset) — buildable from this repo | ✓ | `make` produces `libvuptsdk-base.so.2.0.0`, 55 symbols |
 | Canonical prebuilt — production-deployed binary | ✓ | 68 symbols including `easy_*` v2.1 layer |
 | Smoke test (10 properties, real ciphertext) | ✓ 10/10 | `make test` |
 | Symbol audit (13 properties) | ✓ 13/13 | `make audit` |
@@ -40,7 +40,7 @@ remains as open items. It is updated on every release.
 | `zuptsdk_easy_*` source open-sourced | ✗ Pending | only binary audited |
 | **OPEN canonical prebuilt missing BIND_NOW (Partial RELRO)** | ⚠ Tracked | rebuild prebuilt with `-Wl,-z,now` |
 
-**Bottom line**: libzuptsdk 2.0.0 passes a comprehensive 22-phase internal
+**Bottom line**: libvuptsdk 2.0.0 passes a comprehensive 22-phase internal
 verification including 192,800+ adversarial fuzz trials against the
 canonical binary, all green. **Side-channel timing variance is within 2%**
 of valid decrypts, **0 secret-key bytes leak into ciphertext**, and **0
@@ -130,7 +130,7 @@ Wrong ACCEPTED:    0 <- must be 0
 **Hypothesis**: the from-source build is memory-safe across repeated
 invocations under the strictest sanitizer configuration.
 
-**Method**: Build `libzuptsdk-base.so.2.0.0` with
+**Method**: Build `libvuptsdk-base.so.2.0.0` with
 `-fsanitize=address,undefined -fno-omit-frame-pointer`. Build the smoke test
 binary against it. Run 10 times with `ASAN_OPTIONS=detect_leaks=1`. Pass
 criterion: every run exits 0 with no ASAN warning.
@@ -157,7 +157,7 @@ unification" for details.
 internal `zupt_*`, `vv_*`, or static-helper symbols are visible to
 downstream linkers.
 
-**Method**: `nm -D --defined-only build/libzuptsdk-base.so.2.0.0 | grep ' T '`
+**Method**: `nm -D --defined-only build/libvuptsdk-base.so.2.0.0 | grep ' T '`
 should produce only `zuptsdk_*`-prefixed symbols, all tagged
 `@@ZUPTSDK_1.0`.
 
@@ -198,7 +198,7 @@ in three ways, time each failure mode 500 times, compare medians.
 
 The truncated-blob case is intentional: the parse layer rejects malformed
 blobs in the format pre-flight check before any crypto is performed. This
-leaks "this isn't a libzuptsdk blob" but does not leak any information
+leaks "this isn't a libvuptsdk blob" but does not leak any information
 about a properly-formatted blob's contents or key.
 
 ### Test 8 — Format-fuzz robustness (NEW)
@@ -258,7 +258,7 @@ RPATH, no dangerous symbols).
 **Method**: see `tools/checksec_lib.sh`. Inspects ELF headers, dynamic
 sections, and dynamic symbol table.
 
-**Result for source build (`build/libzuptsdk-base.so.2.0.0`)**:
+**Result for source build (`build/libvuptsdk-base.so.2.0.0`)**:
 
 ```
 ELF type:           DYN  ✓ PIE/PIC
@@ -271,7 +271,7 @@ Symbol versions:    ✓ 1 ABI versions (@@ZUPTSDK_1.0)
 Dangerous symbols:  ✓ PASS - none of gets/system/exec* used
 ```
 
-**Result for canonical prebuilt (`prebuilt/libzuptsdk.so.2.0.0`)**:
+**Result for canonical prebuilt (`prebuilt/libvuptsdk.so.2.0.0`)**:
 
 ```
 ELF type:           DYN  ✓ PIE/PIC
@@ -422,7 +422,7 @@ operations).
 
 ## Defense-in-depth measures
 
-Beyond the cryptographic primitives, libzuptsdk implements:
+Beyond the cryptographic primitives, libvuptsdk implements:
 
 | Measure | Implementation | Verified |
 |---|---|---|
@@ -441,7 +441,7 @@ Beyond the cryptographic primitives, libzuptsdk implements:
 
 ## Inherited from zupt 2.x audit campaign
 
-The libzuptsdk source tree is identical (modulo file paths) to the audited
+The libvuptsdk source tree is identical (modulo file paths) to the audited
 SDK source tree from the zupt repository. The following was verified there
 and is still verified here:
 
@@ -453,8 +453,8 @@ and is still verified here:
 | zupt 2.2 SDK fuzz round 2 | — | 500,000 | 0 crashes |
 | zupt 2.2.1 ASAN/UBSAN sweep | 169 | — | 0 memory errors |
 | zupt 2.2.2 god-tier audit | 169 | 1,000 | 0 crashes |
-| libzuptsdk 2.0.0 initial | 30 + 13 | +11,500 | all green |
-| **libzuptsdk 2.0.0 extended (this audit)** | **30 + 13 + 5 new** | **+192,800** (incl. format-fuzz, key-iso, side-channel) | **all green** |
+| libvuptsdk 2.0.0 initial | 30 + 13 | +11,500 | all green |
+| **libvuptsdk 2.0.0 extended (this audit)** | **30 + 13 + 5 new** | **+192,800** (incl. format-fuzz, key-iso, side-channel) | **all green** |
 | **Cumulative** | **220+** | **942,800** | **all green** |
 
 ---
@@ -482,7 +482,7 @@ The following are tracked as known gaps for the next release. None block
 2.0.0 production deployment, but each represents a real improvement.
 
 1. **Open-source `zuptsdk_easy_*` implementations** — currently in binary
-   form only in `prebuilt/libzuptsdk.so.2.0.0`. Tracked as the top open
+   form only in `prebuilt/libvuptsdk.so.2.0.0`. Tracked as the top open
    item.
 2. **External independent cryptographic audit** — budget required (~$30-60k
    range with reputable firms like Trail of Bits, NCC Group, or Cure53).
@@ -534,8 +534,8 @@ For the methodology document used in the parent zupt project, see
 ## How to reproduce this audit
 
 ```bash
-git clone https://github.com/cristiancmoises/libzuptsdk
-cd libzuptsdk
+git clone https://github.com/cristiancmoises/libvuptsdk
+cd libvuptsdk
 
 # 1. Build + run the standard test suite (30 properties)
 make test
@@ -548,12 +548,12 @@ make audit-licenses
 
 # 4. Adversarial fuzz (compile + run)
 cc -O2 -Iinclude tools/tamper_fuzz.c \
-   prebuilt/libzuptsdk.so.2.0.0 -o /tmp/tf -lpthread -lm
+   prebuilt/libvuptsdk.so.2.0.0 -o /tmp/tf -lpthread -lm
 LD_LIBRARY_PATH=prebuilt /tmp/tf
 
 # 5. Wrong-key fuzz
 cc -O2 -Iinclude tools/wrong_key_fuzz.c \
-   prebuilt/libzuptsdk.so.2.0.0 -o /tmp/wkf -lpthread -lm
+   prebuilt/libvuptsdk.so.2.0.0 -o /tmp/wkf -lpthread -lm
 LD_LIBRARY_PATH=prebuilt /tmp/wkf
 
 # 6. Cross-language binding tests
@@ -563,4 +563,4 @@ PYTHONPATH=bindings/python python3 tests/test_python.py
 
 ---
 
-**License**: This document is part of the libzuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).
+**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).

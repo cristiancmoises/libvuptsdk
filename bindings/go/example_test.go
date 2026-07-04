@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Cristian Cezar Moisés
-package zuptsdk_test
+package vuptsdk_test
 
 import (
 	"bytes"
@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	zupt "github.com/cristiancmoises/libzuptsdk/bindings/go"
+	zupt "github.com/cristiancmoises/libvuptsdk/bindings/go"
 )
 
 func ExampleVersion() {
-	fmt.Printf("libzuptsdk %s\n", zupt.Version())
+	fmt.Printf("libvuptsdk %s\n", zupt.Version())
 }
 
 func TestRoundtrip(t *testing.T) {

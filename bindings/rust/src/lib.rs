@@ -1,4 +1,4 @@
-//! # zuptsdk — Rust bindings for libzuptsdk
+//! # vuptsdk — Rust bindings for libvuptsdk
 //!
 //! Copyright (c) 2026 Cristian Cezar Moisés
 //! SPDX-License-Identifier: AGPL-3.0-or-later
@@ -8,24 +8,24 @@
 //! ## Quick start
 //!
 //! ```no_run
-//! use zuptsdk::{keygen, encrypt, decrypt};
+//! use vuptsdk::{keygen, encrypt, decrypt};
 //!
 //! keygen("alice.pub", "alice.priv")?;
 //!
 //! let blob = encrypt("alice.pub", b"Hello, Alice!")?;
 //! let plain = decrypt("alice.priv", &blob)?;
 //! assert_eq!(plain, b"Hello, Alice!");
-//! # Ok::<(), zuptsdk::Error>(())
+//! # Ok::<(), vuptsdk::Error>(())
 //! ```
 //!
 //! ## Password mode
 //!
 //! ```no_run
-//! use zuptsdk::{encrypt_password, decrypt_password};
+//! use vuptsdk::{encrypt_password, decrypt_password};
 //!
 //! let blob = encrypt_password("strong passphrase", b"secret data")?;
 //! let plain = decrypt_password("strong passphrase", &blob)?;
-//! # Ok::<(), zuptsdk::Error>(())
+//! # Ok::<(), vuptsdk::Error>(())
 //! ```
 
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
@@ -34,7 +34,7 @@ use std::ptr;
 use std::slice;
 
 // ─── FFI declarations ─────────────────────────────────────────────
-#[link(name = "zuptsdk")]
+#[link(name = "vuptsdk")]
 extern "C" {
     fn zuptsdk_version_string() -> *const c_char;
     fn zuptsdk_strerror(code: c_int) -> *const c_char;
@@ -96,7 +96,7 @@ pub struct Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "libzuptsdk[{}]: code {}: {}", self.op, self.code, self.message)
+        write!(f, "libvuptsdk[{}]: code {}: {}", self.op, self.code, self.message)
     }
 }
 
@@ -126,7 +126,7 @@ fn cpath<P: AsRef<Path>>(p: P) -> CString {
 
 // ─── Public API ───────────────────────────────────────────────────
 
-/// Returns the runtime libzuptsdk version (e.g. "2.1.5").
+/// Returns the runtime libvuptsdk version (e.g. "2.1.5").
 pub fn version() -> &'static str {
     unsafe {
         CStr::from_ptr(zuptsdk_version_string())

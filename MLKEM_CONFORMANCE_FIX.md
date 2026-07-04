@@ -194,8 +194,8 @@ Follow-up work after the original report, integrated into this repository:
 ### Scope: from-source vs the shipped prebuilt
 
 This fix and all evidence above pertain to the **from-source** library
-(`libzuptsdk-base.so`, built from `src/`). The canonical
-`prebuilt/libzuptsdk.so.2.0.0` is a binary that predates the fix and is **not**
+(`libvuptsdk-base.so`, built from `src/`). The canonical
+`prebuilt/libvuptsdk.so.2.0.0` is a binary that predates the fix and is **not**
 rebuilt from this patched tree; it must be regenerated and re-audited before it
 can be claimed FIPS 203 conformant. The status line in §1 (⛔→✅) therefore
 describes the source implementation, not the prebuilt artifact.

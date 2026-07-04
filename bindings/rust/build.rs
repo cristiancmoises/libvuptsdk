@@ -3,6 +3,6 @@
 fn main() {
     pkg_config::Config::new()
         .atleast_version("2.0.0")
-        .probe("zuptsdk")
-        .expect("libzuptsdk-dev not found via pkg-config. Install with `make install` or use ZUPTSDK_LIB_DIR.");
+        .probe("vuptsdk")
+        .expect("libvuptsdk-dev not found via pkg-config. Install with `make install` or use ZUPTSDK_LIB_DIR.");
 }

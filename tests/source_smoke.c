@@ -2,10 +2,10 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  * Copyright (c) 2026 Cristian Cezar Moisés
  *
- * libzuptsdk source-only smoke test
+ * libvuptsdk source-only smoke test
  *
  * Exercises the public API symbols that exist in the from-source build
- * (libzuptsdk-base.so). Used by `make test-asan` to verify ASAN/UBSAN
+ * (libvuptsdk-base.so). Used by `make test-asan` to verify ASAN/UBSAN
  * cleanliness without depending on the canonical prebuilt binary.
  *
  * Returns 0 on full pass, 1 on any failure.
@@ -23,7 +23,7 @@ int main(void) {
     int pass = 0, fail = 0;
 
     fprintf(stderr, "═══════════════════════════════════════════════════════════\n");
-    fprintf(stderr, "  libzuptsdk %s source-only smoke test\n",
+    fprintf(stderr, "  libvuptsdk %s source-only smoke test\n",
             zuptsdk_version_string());
     fprintf(stderr, "═══════════════════════════════════════════════════════════\n");
 

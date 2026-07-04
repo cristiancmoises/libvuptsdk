@@ -2,7 +2,7 @@
 /* Key isolation test: verify that the SECRET portion of the private key
  * never appears in any ciphertext.
  *
- * Background: the libzuptsdk privkey file format embeds the public key
+ * Background: the libvuptsdk privkey file format embeds the public key
  * twice (once after the privkey header, once inside the FIPS 203 ML-KEM
  * dk_KEM structure as `ek_KEM`). Both occurrences are pubkey material,
  * not secret. We have to find and exclude them.

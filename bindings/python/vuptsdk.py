@@ -1,40 +1,40 @@
 """
-zuptsdk — Python bindings for libzuptsdk
+vuptsdk — Python bindings for libvuptsdk
 
 Copyright (c) 2026 Cristian Cezar Moisés
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-Pure-ctypes bindings for the libzuptsdk easy_* convenience API.
+Pure-ctypes bindings for the libvuptsdk easy_* convenience API.
 No external Python dependencies (ctypes is in the stdlib).
 
 Quick start
 -----------
-    import zuptsdk
+    import vuptsdk
 
     # Generate a public/private keypair
-    zuptsdk.keygen("alice.pub", "alice.priv")
+    vuptsdk.keygen("alice.pub", "alice.priv")
 
     # Encrypt a message for Alice
-    blob = zuptsdk.encrypt("alice.pub", b"Hello, Alice!")
+    blob = vuptsdk.encrypt("alice.pub", b"Hello, Alice!")
 
     # Alice decrypts with her private key
-    plaintext = zuptsdk.decrypt("alice.priv", blob)
+    plaintext = vuptsdk.decrypt("alice.priv", blob)
     assert plaintext == b"Hello, Alice!"
 
 Password mode
 -------------
-    blob = zuptsdk.encrypt_password("my passphrase", b"secret bytes")
-    plaintext = zuptsdk.decrypt_password("my passphrase", blob)
+    blob = vuptsdk.encrypt_password("my passphrase", b"secret bytes")
+    plaintext = vuptsdk.decrypt_password("my passphrase", blob)
     assert plaintext == b"secret bytes"
 
 File mode
 ---------
-    zuptsdk.encrypt_file("alice.pub", "doc.pdf", "doc.pdf.enc")
-    zuptsdk.decrypt_file("alice.priv", "doc.pdf.enc", "doc-recovered.pdf")
+    vuptsdk.encrypt_file("alice.pub", "doc.pdf", "doc.pdf.enc")
+    vuptsdk.decrypt_file("alice.priv", "doc.pdf.enc", "doc-recovered.pdf")
 
 Exceptions
 ----------
-All errors raise `zuptsdk.ZuptError` with the C-side error code and
+All errors raise `vuptsdk.ZuptError` with the C-side error code and
 message attached as `.code` and `.message` attributes.
 """
 
@@ -49,26 +49,26 @@ from typing import Optional
 # ─────────────────────────────────────────────────────────────────────
 
 def _load_library():
-    """Locate and load libzuptsdk.so. Override path with ZUPTSDK_LIBRARY env var."""
+    """Locate and load libvuptsdk.so. Override path with ZUPTSDK_LIBRARY env var."""
     override = os.environ.get("ZUPTSDK_LIBRARY")
     if override:
         return ctypes.CDLL(override)
 
     # Try standard locations
-    for name in ("libzuptsdk.so.2", "libzuptsdk.so", "zuptsdk"):
+    for name in ("libvuptsdk.so.2", "libvuptsdk.so", "vuptsdk"):
         try:
             return ctypes.CDLL(name)
         except OSError:
             continue
 
     # Try via ldconfig
-    found = ctypes.util.find_library("zuptsdk")
+    found = ctypes.util.find_library("vuptsdk")
     if found:
         return ctypes.CDLL(found)
 
     raise RuntimeError(
-        "libzuptsdk shared library not found. "
-        "Install via 'make install' or set ZUPTSDK_LIBRARY=/path/to/libzuptsdk.so"
+        "libvuptsdk shared library not found. "
+        "Install via 'make install' or set ZUPTSDK_LIBRARY=/path/to/libvuptsdk.so"
     )
 
 
@@ -167,13 +167,13 @@ _lib.zuptsdk_easy_random_salt.argtypes = [ctypes.c_char_p]
 # ─────────────────────────────────────────────────────────────────────
 
 class ZuptError(Exception):
-    """Raised on any libzuptsdk error."""
+    """Raised on any libvuptsdk error."""
 
     def __init__(self, code: int, op: str = ""):
         self.code = code
         msg_bytes = _lib.zuptsdk_strerror(code) or b"unknown error"
         self.message = msg_bytes.decode("utf-8", errors="replace")
-        full = f"libzuptsdk error {code}: {self.message}"
+        full = f"libvuptsdk error {code}: {self.message}"
         if op:
             full = f"{op}: {full}"
         super().__init__(full)
@@ -189,7 +189,7 @@ def _check(rc: int, op: str = "") -> None:
 # ─────────────────────────────────────────────────────────────────────
 
 def version() -> str:
-    """Return the runtime libzuptsdk version, e.g. '2.1.5'."""
+    """Return the runtime libvuptsdk version, e.g. '2.1.5'."""
     return _lib.zuptsdk_version_string().decode("utf-8")
 
 

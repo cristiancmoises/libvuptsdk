@@ -47,7 +47,7 @@ std::vector<uint8_t> decrypt_with(const std::string& privkey_path,
 }
 
 int main() {
-    std::cout << "libzuptsdk " << zuptsdk_version_string() << std::endl;
+    std::cout << "libvuptsdk " << zuptsdk_version_string() << std::endl;
 
     check(zuptsdk_easy_keygen("alice.pub", "alice.priv"), "keygen");
 

@@ -2,16 +2,16 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Cristian Cezar Moisés
 #
-# Comprehensive ELF hardening audit for libzuptsdk shared libraries.
+# Comprehensive ELF hardening audit for libvuptsdk shared libraries.
 # Reports on RELRO, NX, stack canary, FORTIFY_SOURCE, RPATH, symbol versions.
 #
 # Usage:
 #   tools/checksec_lib.sh [path/to/library.so]
-#   (default: prebuilt/libzuptsdk.so.2.0.0)
+#   (default: prebuilt/libvuptsdk.so.2.0.0)
 # Note: do NOT set -e — readelf | grep returns non-zero when a section
 # is absent, which is normal control flow for this script.
 
-LIB="${1:-prebuilt/libzuptsdk.so.2.0.0}"
+LIB="${1:-prebuilt/libvuptsdk.so.2.0.0}"
 if [ ! -f "$LIB" ]; then
     echo "Error: $LIB not found" >&2
     exit 1

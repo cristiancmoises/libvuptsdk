@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
-/* Throughput + latency benchmarks for libzuptsdk easy_* API.
+/* Throughput + latency benchmarks for libvuptsdk easy_* API.
  * Reports MB/s (wall-clock) and median/p99 latency in microseconds. */
 #define _DEFAULT_SOURCE 1
 #define _POSIX_C_SOURCE 200809L
@@ -156,7 +156,7 @@ static void bench_throughput(size_t msg_size) {
 
 int main(void) {
     printf("═══════════════════════════════════════════════════════════════════════════\n");
-    printf("  libzuptsdk %s — performance benchmark\n", zuptsdk_version_string());
+    printf("  libvuptsdk %s — performance benchmark\n", zuptsdk_version_string());
     printf("═══════════════════════════════════════════════════════════════════════════\n\n");
 
     /* Warmup */

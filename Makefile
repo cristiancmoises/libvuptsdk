@@ -2,15 +2,15 @@
 # Copyright (c) 2026 Cristian Cezar Moisés
 #
 # ─────────────────────────────────────────────────────────────────────
-#  libzuptsdk — public C ABI for Zupt cryptography
+#  libvuptsdk — public C ABI for Zupt cryptography
 # ─────────────────────────────────────────────────────────────────────
 #
 #  Two libraries are shipped:
 #
-#  1. libzuptsdk-base.so.2.0.0  (built from source in this repo)
+#  1. libvuptsdk-base.so.2.0.0  (built from source in this repo)
 #     The compress/extract/archive/options API. ZUPTSDK_1.0 ABI subset.
 #
-#  2. libzuptsdk.so.2.0.0       (prebuilt, in prebuilt/)
+#  2. libvuptsdk.so.2.0.0       (prebuilt, in prebuilt/)
 #     The full ZUPTSDK_1.0 + ZUPTSDK_2.1 ABI including the easy_*
 #     convenience layer, password mode, streaming AEAD, and metrics.
 #     Some functions in this binary do not have source available in
@@ -84,11 +84,11 @@ BUILD_DIR  = build
 PIC_OBJS   = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(ZUPT_SOURCES) $(VV_SOURCES) $(SDK_SOURCE))
 PIC_FLAGS  = $(PIC) -DZUPT_BUILDING_SDK=1
 
-SOURCE_LIB    = $(BUILD_DIR)/libzuptsdk-base.so.$(SDK_FULLVERSION)
-SOURCE_STATIC = $(BUILD_DIR)/libzuptsdk-base.a
-PREBUILT_LIB  = prebuilt/libzuptsdk.so.$(SDK_FULLVERSION)
-STAGED_LIB    = $(BUILD_DIR)/libzuptsdk.so.$(SDK_FULLVERSION)
-PKGCONFIG     = $(BUILD_DIR)/zuptsdk.pc
+SOURCE_LIB    = $(BUILD_DIR)/libvuptsdk-base.so.$(SDK_FULLVERSION)
+SOURCE_STATIC = $(BUILD_DIR)/libvuptsdk-base.a
+PREBUILT_LIB  = prebuilt/libvuptsdk.so.$(SDK_FULLVERSION)
+STAGED_LIB    = $(BUILD_DIR)/libvuptsdk.so.$(SDK_FULLVERSION)
+PKGCONFIG     = $(BUILD_DIR)/vuptsdk.pc
 LINKER_MAP    = zuptsdk.map
 
 # ── Default target ──────────────────────────────────────────────────
@@ -96,10 +96,10 @@ LINKER_MAP    = zuptsdk.map
 all: $(SOURCE_LIB) $(SOURCE_STATIC) $(STAGED_LIB) $(PKGCONFIG)
 	@echo ""
 	@echo "  ╭──────────────────────────────────────────────────────╮"
-	@echo "  │  libzuptsdk $(SDK_FULLVERSION) — build complete                   │"
+	@echo "  │  libvuptsdk $(SDK_FULLVERSION) — build complete                   │"
 	@echo "  │                                                      │"
-	@echo "  │  Source-built: build/libzuptsdk-base.so (subset)     │"
-	@echo "  │  Canonical:    build/libzuptsdk.so      (full)       │"
+	@echo "  │  Source-built: build/libvuptsdk-base.so (subset)     │"
+	@echo "  │  Canonical:    build/libvuptsdk.so      (full)       │"
 	@echo "  │                                                      │"
 	@echo "  │  'make test'    — smoke test + symbol audit          │"
 	@echo "  │  'make install' — install canonical to PREFIX        │"
@@ -129,11 +129,11 @@ $(BUILD_DIR):
 $(SOURCE_LIB): $(PIC_OBJS) $(LINKER_MAP)
 	$(Q)echo "  LD  $@"
 	$(Q)$(CC) -shared \
-		-Wl,-soname,libzuptsdk-base.so.$(SDK_SOVERSION) \
+		-Wl,-soname,libvuptsdk-base.so.$(SDK_SOVERSION) \
 		-Wl,--version-script=$(LINKER_MAP) \
 		$(PIC_OBJS) -o $@ $(LDFLAGS) $(LIBS)
-	$(Q)cd $(BUILD_DIR) && ln -sf libzuptsdk-base.so.$(SDK_FULLVERSION) libzuptsdk-base.so.$(SDK_SOVERSION)
-	$(Q)cd $(BUILD_DIR) && ln -sf libzuptsdk-base.so.$(SDK_SOVERSION)   libzuptsdk-base.so
+	$(Q)cd $(BUILD_DIR) && ln -sf libvuptsdk-base.so.$(SDK_FULLVERSION) libvuptsdk-base.so.$(SDK_SOVERSION)
+	$(Q)cd $(BUILD_DIR) && ln -sf libvuptsdk-base.so.$(SDK_SOVERSION)   libvuptsdk-base.so
 
 $(SOURCE_STATIC): $(PIC_OBJS)
 	$(Q)echo "  AR  $@"
@@ -144,8 +144,8 @@ $(SOURCE_STATIC): $(PIC_OBJS)
 $(STAGED_LIB): $(PREBUILT_LIB) | $(BUILD_DIR)
 	$(Q)echo "  CP  $@  [canonical prebuilt]"
 	$(Q)cp $(PREBUILT_LIB) $@
-	$(Q)cd $(BUILD_DIR) && ln -sf libzuptsdk.so.$(SDK_FULLVERSION) libzuptsdk.so.$(SDK_SOVERSION)
-	$(Q)cd $(BUILD_DIR) && ln -sf libzuptsdk.so.$(SDK_SOVERSION)   libzuptsdk.so
+	$(Q)cd $(BUILD_DIR) && ln -sf libvuptsdk.so.$(SDK_FULLVERSION) libvuptsdk.so.$(SDK_SOVERSION)
+	$(Q)cd $(BUILD_DIR) && ln -sf libvuptsdk.so.$(SDK_SOVERSION)   libvuptsdk.so
 
 # ── pkg-config ──────────────────────────────────────────────────────
 # This rule generates the .pc with whatever PREFIX is set at build time.
@@ -153,7 +153,7 @@ $(STAGED_LIB): $(PREBUILT_LIB) | $(BUILD_DIR)
 # so that DESTDIR= or PREFIX= overrides are honored.
 $(PKGCONFIG): | $(BUILD_DIR)
 	$(Q)echo "  GEN $@"
-	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(INCLUDEDIR)\n\nName: zuptsdk\nDescription: libzuptsdk - post-quantum hybrid cryptography\nVersion: $(SDK_FULLVERSION)\nLibs: -L$${libdir} -lzuptsdk\nCflags: -I$${includedir}\n' > $@
+	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(INCLUDEDIR)\n\nName: vuptsdk\nDescription: libvuptsdk - post-quantum hybrid cryptography\nVersion: $(SDK_FULLVERSION)\nLibs: -L$${libdir} -lvuptsdk\nCflags: -I$${includedir}\n' > $@
 
 # ── Tests ───────────────────────────────────────────────────────────
 .PHONY: test
@@ -163,7 +163,7 @@ test: $(STAGED_LIB) $(SOURCE_LIB)
 		$(STAGED_LIB) $(SOURCE_LIB) \
 		-o $(BUILD_DIR)/smoke_test $(LDFLAGS) $(LIBS)
 	$(Q)echo ""
-	$(Q)echo "═══ libzuptsdk smoke test ═══"
+	$(Q)echo "═══ libvuptsdk smoke test ═══"
 	$(Q)LD_LIBRARY_PATH=$(BUILD_DIR) $(BUILD_DIR)/smoke_test
 	$(Q)echo ""
 	$(Q)$(MAKE) audit
@@ -187,7 +187,7 @@ test-asan:
 	   $(SOURCE_LIB) \
 	   -o $(BUILD_DIR)/source_smoke_asan -fsanitize=address,undefined -lpthread -lm
 	$(Q)echo ""
-	$(Q)echo "═══ libzuptsdk source ASAN/UBSAN smoke test ═══"
+	$(Q)echo "═══ libvuptsdk source ASAN/UBSAN smoke test ═══"
 	$(Q)ASAN_OPTIONS=detect_leaks=0 LD_LIBRARY_PATH=$(BUILD_DIR) $(BUILD_DIR)/source_smoke_asan
 	@echo ""
 	@echo "ASAN build + test complete"
@@ -200,14 +200,14 @@ install: all
 	# Strip the installed library to remove debug info (information disclosure
 	# hardening). Override with `make install STRIP_INSTALL=0` to keep symbols.
 	@if [ "$(STRIP_INSTALL)" != "0" ]; then \
-	    echo "  STRIP $(DESTDIR)$(LIBDIR)/libzuptsdk.so.$(SDK_FULLVERSION)"; \
+	    echo "  STRIP $(DESTDIR)$(LIBDIR)/libvuptsdk.so.$(SDK_FULLVERSION)"; \
 	    $(STRIP) --strip-unneeded --remove-section=.note.GNU-gold-version \
 	             --remove-section=.note.gnu.gold-version \
-	             $(DESTDIR)$(LIBDIR)/libzuptsdk.so.$(SDK_FULLVERSION); \
+	             $(DESTDIR)$(LIBDIR)/libvuptsdk.so.$(SDK_FULLVERSION); \
 	fi
-	cd $(DESTDIR)$(LIBDIR) && ln -sf libzuptsdk.so.$(SDK_FULLVERSION) libzuptsdk.so.$(SDK_SOVERSION)
-	cd $(DESTDIR)$(LIBDIR) && ln -sf libzuptsdk.so.$(SDK_SOVERSION)   libzuptsdk.so
-	$(INSTALL) -m 0644 $(SOURCE_STATIC) $(DESTDIR)$(LIBDIR)/libzuptsdk.a
+	cd $(DESTDIR)$(LIBDIR) && ln -sf libvuptsdk.so.$(SDK_FULLVERSION) libvuptsdk.so.$(SDK_SOVERSION)
+	cd $(DESTDIR)$(LIBDIR) && ln -sf libvuptsdk.so.$(SDK_SOVERSION)   libvuptsdk.so
+	$(INSTALL) -m 0644 $(SOURCE_STATIC) $(DESTDIR)$(LIBDIR)/libvuptsdk.a
 	$(INSTALL) -d $(DESTDIR)$(INCLUDEDIR)
 	for h in zuptsdk.h zuptsdk_easy.h zuptsdk.hpp zuptsdk_metrics.h \
 	         zsdk_aes256_gcm_siv.h zsdk_aes256_siv.h zsdk_argon2id.h \
@@ -215,19 +215,19 @@ install: all
 	    $(INSTALL) -m 0644 include/$$h $(DESTDIR)$(INCLUDEDIR)/; \
 	done
 	$(INSTALL) -d $(DESTDIR)$(PKGCONFIGDIR)
-	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(INCLUDEDIR)\n\nName: zuptsdk\nDescription: libzuptsdk - post-quantum hybrid cryptography\nVersion: $(SDK_FULLVERSION)\nLibs: -L$${libdir} -lzuptsdk\nCflags: -I$${includedir}\n' > $(DESTDIR)$(PKGCONFIGDIR)/zuptsdk.pc
-	$(Q)chmod 0644 $(DESTDIR)$(PKGCONFIGDIR)/zuptsdk.pc
+	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(INCLUDEDIR)\n\nName: vuptsdk\nDescription: libvuptsdk - post-quantum hybrid cryptography\nVersion: $(SDK_FULLVERSION)\nLibs: -L$${libdir} -lvuptsdk\nCflags: -I$${includedir}\n' > $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk.pc
+	$(Q)chmod 0644 $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk.pc
 
 .PHONY: uninstall
 uninstall:
-	rm -f $(DESTDIR)$(LIBDIR)/libzuptsdk.so*
-	rm -f $(DESTDIR)$(LIBDIR)/libzuptsdk.a
+	rm -f $(DESTDIR)$(LIBDIR)/libvuptsdk.so*
+	rm -f $(DESTDIR)$(LIBDIR)/libvuptsdk.a
 	rm -f $(DESTDIR)$(INCLUDEDIR)/zuptsdk.h
 	rm -f $(DESTDIR)$(INCLUDEDIR)/zuptsdk_easy.h
 	rm -f $(DESTDIR)$(INCLUDEDIR)/zuptsdk.hpp
 	rm -f $(DESTDIR)$(INCLUDEDIR)/zuptsdk_metrics.h
 	rm -f $(DESTDIR)$(INCLUDEDIR)/zsdk_*.h
-	rm -f $(DESTDIR)$(PKGCONFIGDIR)/zuptsdk.pc
+	rm -f $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk.pc
 
 # ── License audit ───────────────────────────────────────────────────
 # Verifies every source file carries SPDX-License-Identifier: AGPL-3.0-or-later.
@@ -244,7 +244,7 @@ uninstall:
 .PHONY: formal-audit
 formal-audit:
 	$(Q)echo "═══════════════════════════════════════════════════════════"
-	$(Q)echo "      libzuptsdk formal audit — full verification battery"
+	$(Q)echo "      libvuptsdk formal audit — full verification battery"
 	$(Q)echo "═══════════════════════════════════════════════════════════"
 	$(Q)echo ""
 	$(Q)echo "── Phase 1/4: build + smoke + symbol audit ──"
@@ -294,12 +294,12 @@ audit-licenses:
 audit-hardening: $(SOURCE_LIB) $(STAGED_LIB)
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "  Hardening audit: source build (libzuptsdk-base.so)"
+	@echo "  Hardening audit: source build (libvuptsdk-base.so)"
 	@echo "═══════════════════════════════════════════════════════════"
-	@bash tools/checksec_lib.sh $(BUILD_DIR)/libzuptsdk-base.so.$(SDK_FULLVERSION) || true
+	@bash tools/checksec_lib.sh $(BUILD_DIR)/libvuptsdk-base.so.$(SDK_FULLVERSION) || true
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
-	@echo "  Hardening audit: canonical prebuilt (libzuptsdk.so)"
+	@echo "  Hardening audit: canonical prebuilt (libvuptsdk.so)"
 	@echo "═══════════════════════════════════════════════════════════"
 	@bash tools/checksec_lib.sh $(PREBUILT_LIB) || true
 
@@ -374,7 +374,7 @@ clean:
 	$(Q)find . -name '*.o' -not -path './prebuilt/*' -delete
 
 # ── Distribution tarball ────────────────────────────────────────────
-DIST_NAME = libzuptsdk-$(SDK_FULLVERSION)
+DIST_NAME = libvuptsdk-$(SDK_FULLVERSION)
 
 .PHONY: dist
 dist:
@@ -400,7 +400,7 @@ dist:
 # ── Help ────────────────────────────────────────────────────────────
 .PHONY: help
 help:
-	@echo "libzuptsdk $(SDK_FULLVERSION) — build targets:"
+	@echo "libvuptsdk $(SDK_FULLVERSION) — build targets:"
 	@echo "  make             Build from-source + stage canonical prebuilt"
 	@echo "  make test        Compile + run smoke test, then audit"
 	@echo "  make audit       Verify source build is a subset of canonical"

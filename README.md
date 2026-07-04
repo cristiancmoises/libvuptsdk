@@ -1,4 +1,4 @@
-# libzuptsdk
+# libvuptsdk
 
 [![License: AGPL-3.0+](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![ABI: ZUPTSDK_2.1](https://img.shields.io/badge/ABI-ZUPTSDK__2.1-green.svg)](zuptsdk.map)
@@ -7,11 +7,11 @@
 
 **Post-quantum hybrid cryptography for production C, C++, Python, Node.js, Go, and Rust applications.**
 
-`libzuptsdk` is the cryptographic backbone of the [Zupt](https://github.com/cristiancmoises/zupt) backup utility. The library is also designed for **standalone use**: any application that needs strong, future-proof, audited encryption can link against it.
+`libvuptsdk` is the cryptographic backbone of the [Zupt](https://github.com/cristiancmoises/zupt) backup utility. The library is also designed for **standalone use**: any application that needs strong, future-proof, audited encryption can link against it.
 
-## Why libzuptsdk?
+## Why libvuptsdk?
 
-| Concern | What libzuptsdk gives you |
+| Concern | What libvuptsdk gives you |
 |---|---|
 | **Quantum-safe** | ML-KEM-768 (FIPS 203, NIST 2024-standardized) hybrid with X25519 ECDH. Both must fall to break a message. The from-source KEM is verified conformant against the official NIST ACVP vectors (**80/80**) and two independent implementations — see [ML-KEM-768 conformance](#ml-kem-768-conformance-status). |
 | **Misuse-resistant** | Default AEAD (XChaCha20-Poly1305) uses random 24-byte nonces — no nonce-reuse risk. AES-256-SIV available for nonce-misuse-resistant mode. |
@@ -27,22 +27,22 @@
 ### Debian / Ubuntu / Mint
 
 ```bash
-sudo apt install ./libzuptsdk2_2.0.0_amd64.deb ./libzuptsdk-dev_2.0.0_amd64.deb
+sudo apt install ./libvuptsdk2_2.0.0_amd64.deb ./libvuptsdk-dev_2.0.0_amd64.deb
 ```
 
 ### Fedora / RHEL / openSUSE
 
 ```bash
-tar -xzf libzuptsdk-2.0.0.srpm.tar.gz
-rpmbuild -bb SPECS/libzuptsdk.spec
-sudo rpm -i ~/rpmbuild/RPMS/x86_64/libzuptsdk-2.0.0-*.rpm
+tar -xzf libvuptsdk-2.0.0.srpm.tar.gz
+rpmbuild -bb SPECS/libvuptsdk.spec
+sudo rpm -i ~/rpmbuild/RPMS/x86_64/libvuptsdk-2.0.0-*.rpm
 ```
 
 ### From source
 
 ```bash
-tar -xzf libzuptsdk-2.0.0.tar.gz
-cd libzuptsdk-2.0.0
+tar -xzf libvuptsdk-2.0.0.tar.gz
+cd libvuptsdk-2.0.0
 make
 sudo make install                  # → /usr/local/lib + /usr/local/include
 sudo make install PREFIX=/opt/zupt # custom prefix
@@ -51,10 +51,10 @@ sudo make install PREFIX=/opt/zupt # custom prefix
 Verify the install:
 
 ```bash
-pkg-config --modversion zuptsdk    # → 2.0.0
+pkg-config --modversion vuptsdk    # → 2.0.0
 echo '#include <zuptsdk.h>
 int main(){printf("%s\n",zuptsdk_version_string());}' \
-  | cc -x c - $(pkg-config --cflags --libs zuptsdk) -o /tmp/v && /tmp/v
+  | cc -x c - $(pkg-config --cflags --libs vuptsdk) -o /tmp/v && /tmp/v
 ```
 
 ---
@@ -152,41 +152,41 @@ zuptsdk_secure_zero(master_key, sizeof(master_key));
 
 # Language bindings
 
-All bindings are tested against the canonical `libzuptsdk.so.2.0.0` and live in [`bindings/`](bindings/).
+All bindings are tested against the canonical `libvuptsdk.so.2.0.0` and live in [`bindings/`](bindings/).
 
 ## Python
 
 ```python
-import zuptsdk
+import vuptsdk
 
 # Generate keypair
-zuptsdk.keygen("alice.pub", "alice.priv")
+vuptsdk.keygen("alice.pub", "alice.priv")
 
 # Encrypt for Alice
-blob = zuptsdk.encrypt("alice.pub", b"Hello, post-quantum world!")
+blob = vuptsdk.encrypt("alice.pub", b"Hello, post-quantum world!")
 
 # Alice decrypts
-plain = zuptsdk.decrypt("alice.priv", blob)
+plain = vuptsdk.decrypt("alice.priv", blob)
 assert plain == b"Hello, post-quantum world!"
 
 # Password mode
-blob = zuptsdk.encrypt_password("strong passphrase", b"secret data")
-plain = zuptsdk.decrypt_password("strong passphrase", blob)
+blob = vuptsdk.encrypt_password("strong passphrase", b"secret data")
+plain = vuptsdk.decrypt_password("strong passphrase", blob)
 
 # File mode (no size limit)
-zuptsdk.encrypt_file("alice.pub", "doc.pdf", "doc.pdf.enc")
-zuptsdk.decrypt_file("alice.priv", "doc.pdf.enc", "doc-recovered.pdf")
+vuptsdk.encrypt_file("alice.pub", "doc.pdf", "doc.pdf.enc")
+vuptsdk.decrypt_file("alice.priv", "doc.pdf.enc", "doc-recovered.pdf")
 
 # Tamper detection — raises ZuptError
 try:
-    blob = bytearray(zuptsdk.encrypt("alice.pub", b"secret"))
+    blob = bytearray(vuptsdk.encrypt("alice.pub", b"secret"))
     blob[10] ^= 1
-    zuptsdk.decrypt("alice.priv", bytes(blob))
-except zuptsdk.ZuptError as e:
+    vuptsdk.decrypt("alice.priv", bytes(blob))
+except vuptsdk.ZuptError as e:
     print(f"Caught tampering: code={e.code}, message={e.message}")
 ```
 
-**Install**: copy [`bindings/python/zuptsdk.py`](bindings/python/zuptsdk.py) into your project. Pure ctypes, zero pip dependencies. Tested with Python 3.8+.
+**Install**: copy [`bindings/python/vuptsdk.py`](bindings/python/vuptsdk.py) into your project. Pure ctypes, zero pip dependencies. Tested with Python 3.8+.
 
 **Test suite**: 13 properties, all passing. Run with:
 
@@ -197,7 +197,7 @@ PYTHONPATH=bindings/python python3 tests/test_python.py
 ## Node.js
 
 ```javascript
-const zupt = require('zuptsdk');
+const zupt = require('vuptsdk');
 
 // Generate keypair
 zupt.keygen('alice.pub', 'alice.priv');
@@ -220,7 +220,7 @@ const ct = zupt.encryptField(key, 'alice@example.com');
 const pt = zupt.decryptField(key, ct);
 ```
 
-**Install**: `npm install koffi` then copy [`bindings/node/zuptsdk.js`](bindings/node/zuptsdk.js).
+**Install**: `npm install koffi` then copy [`bindings/node/vuptsdk.js`](bindings/node/vuptsdk.js).
 
 ## Go
 
@@ -231,7 +231,7 @@ import (
     "fmt"
     "log"
 
-    zupt "github.com/cristiancmoises/libzuptsdk/bindings/go"
+    zupt "github.com/cristiancmoises/libvuptsdk/bindings/go"
 )
 
 func main() {
@@ -255,7 +255,7 @@ func main() {
 **Build**:
 
 ```bash
-go build  # cgo automatically links against libzuptsdk via pkg-config
+go build  # cgo automatically links against libvuptsdk via pkg-config
 ```
 
 ## Rust
@@ -264,15 +264,15 @@ go build  # cgo automatically links against libzuptsdk via pkg-config
 
 ```toml
 [dependencies]
-zuptsdk = "2.0"
+vuptsdk = "2.0"
 ```
 
 `src/main.rs`:
 
 ```rust
-use zuptsdk::{keygen, encrypt, decrypt};
+use vuptsdk::{keygen, encrypt, decrypt};
 
-fn main() -> Result<(), zuptsdk::Error> {
+fn main() -> Result<(), vuptsdk::Error> {
     keygen("alice.pub", "alice.priv")?;
 
     let blob = encrypt("alice.pub", b"Hello, Rust!")?;
@@ -283,7 +283,7 @@ fn main() -> Result<(), zuptsdk::Error> {
 }
 ```
 
-The Rust crate uses `pkg-config` via `build.rs` to locate libzuptsdk. Install the `libzuptsdk-dev` package or run `make install` first.
+The Rust crate uses `pkg-config` via `build.rs` to locate libvuptsdk. Install the `libvuptsdk-dev` package or run `make install` first.
 
 ## C++
 
@@ -318,7 +318,7 @@ std::vector<uint8_t> encrypt_for(const std::string& pubkey,
 Compile with:
 
 ```bash
-g++ -std=c++17 myapp.cpp $(pkg-config --cflags --libs zuptsdk) -o myapp
+g++ -std=c++17 myapp.cpp $(pkg-config --cflags --libs vuptsdk) -o myapp
 ```
 
 ## C (low-level)
@@ -336,7 +336,7 @@ int main(void) {
 Compile:
 
 ```bash
-cc myapp.c $(pkg-config --cflags --libs zuptsdk) -o myapp
+cc myapp.c $(pkg-config --cflags --libs vuptsdk) -o myapp
 ```
 
 ---
@@ -386,7 +386,7 @@ All functions return `0` on success, non-zero on failure. Use `zuptsdk_strerror(
 | -3 | I/O error (file not found, permission denied) |
 | -4 | out of memory |
 | -10 | authentication failure (MAC reject — tampered or wrong key) |
-| -11 | format error (not a libzuptsdk blob, or version too new) |
+| -11 | format error (not a libvuptsdk blob, or version too new) |
 
 The authoritative code list is `zuptsdk_error_t` in [`include/zuptsdk.h`](include/zuptsdk.h). Note there is **no** distinct "KEM decapsulation failure" code: ML-KEM-768 uses FIPS 203 implicit rejection, so a wrong key or tampered ciphertext always surfaces as the authentication/MAC failure above, never as a KEM-level error.
 
@@ -433,7 +433,7 @@ cd conformance-suite && python3 run_kats.py ../katz     # expect 80/80
 
 > **Two important caveats.**
 > 1. **This conformance holds for the from-source library.** The canonical
->    `prebuilt/libzuptsdk.so.2.0.0` predates the 2026-07-02 fix
+>    `prebuilt/libvuptsdk.so.2.0.0` predates the 2026-07-02 fix
 >    (see [`MLKEM_CONFORMANCE_FIX.md`](MLKEM_CONFORMANCE_FIX.md)) and is **not**
 >    rebuilt from this patched source — it must be regenerated and re-audited
 >    before it can be claimed conformant.
@@ -451,8 +451,8 @@ This repository ships **two libraries**, an intentional design:
 
 | Library | Source | Symbols | When to use |
 |---|---|---|---|
-| `libzuptsdk-base.so` | from source in this repo | 55 (ZUPTSDK_1.0 subset) | Verifying the build, embedded use, builds where binary blobs aren't allowed |
-| `libzuptsdk.so` | bundled prebuilt | 68 (full ZUPTSDK_1.0 + 2.1, including `easy_*`) | **Production use; what `make install` installs and downstream apps link against** |
+| `libvuptsdk-base.so` | from source in this repo | 55 (ZUPTSDK_1.0 subset) | Verifying the build, embedded use, builds where binary blobs aren't allowed |
+| `libvuptsdk.so` | bundled prebuilt | 68 (full ZUPTSDK_1.0 + 2.1, including `easy_*`) | **Production use; what `make install` installs and downstream apps link against** |
 
 **Why ship a prebuilt at all?** The `easy_*` convenience layer (`zuptsdk_easy_encrypt`, etc.) and a few v2.1 functions don't have source code in this public tree for legacy reasons. The prebuilt binary is the audited, production-deployed artifact; the from-source library proves the rest of the codebase is buildable and a strict subset.
 
@@ -499,18 +499,18 @@ Separately, the **ML-KEM-768 conformance gate** ([`conformance-suite/`](conforma
 
 # Versioning & ABI commitment
 
-`libzuptsdk` follows strict ABI versioning at the linker level:
+`libvuptsdk` follows strict ABI versioning at the linker level:
 
-- **Major** (`libzuptsdk.so.2`): incompatible ABI break
+- **Major** (`libvuptsdk.so.2`): incompatible ABI break
 - **Minor** (`ZUPTSDK_2.1` block in `zuptsdk.map`): additive, backward-compatible
-- **Patch** (`libzuptsdk.so.2.0.0` → `2.0.1`): bug fixes only, no API change
+- **Patch** (`libvuptsdk.so.2.0.0` → `2.0.1`): bug fixes only, no API change
 
 The contract:
 
 - **No symbol in `ZUPTSDK_1.0` will ever be removed or change behavior.**
 - **No symbol in `ZUPTSDK_1.0` will change its function signature.**
 - **New symbols added in 2.x go into `ZUPTSDK_2.x` blocks.** Old code linked against `ZUPTSDK_1.0` keeps working.
-- Any incompatible change is a `libzuptsdk.so.3` event (major SONAME bump, separate parallel-installable library).
+- Any incompatible change is a `libvuptsdk.so.3` event (major SONAME bump, separate parallel-installable library).
 
 Current: **2.0.0** (ABI: ZUPTSDK_1.0 + ZUPTSDK_2.1).
 
@@ -552,11 +552,11 @@ For commercial licensing inquiries: `zupt@riseup.net`.
 
 # See also
 
-- [zupt](https://github.com/cristiancmoises/zupt) — CLI + GUI built on libzuptsdk
+- [zupt](https://github.com/cristiancmoises/zupt) — CLI + GUI built on libvuptsdk
 - [zupt SECURITY.md](https://github.com/cristiancmoises/zupt/blob/main/SECURITY.md) — threat model for the CLI
 - [Jasmin](https://github.com/jasmin-lang/jasmin) — verified-CT cryptography compiler used here
 - [NIST FIPS 203](https://csrc.nist.gov/pubs/fips/203/final) — ML-KEM specification
 
 ---
 
-**libzuptsdk 2.0.0** · Author: Cristian Cezar Moisés · License: AGPL-3.0-or-later
+**libvuptsdk 2.0.0** · Author: Cristian Cezar Moisés · License: AGPL-3.0-or-later

@@ -1,4 +1,4 @@
-// Package zuptsdk provides Go bindings for libzuptsdk using cgo.
+// Package vuptsdk provides Go bindings for libvuptsdk using cgo.
 //
 // Copyright (c) 2026 Cristian Cezar Moisés
 // SPDX-License-Identifier: AGPL-3.0-or-later
@@ -9,28 +9,28 @@
 //
 //	import (
 //	    "fmt"
-//	    "github.com/cristiancmoises/libzuptsdk/bindings/go"
+//	    "github.com/cristiancmoises/libvuptsdk/bindings/go"
 //	)
 //
 //	func main() {
-//	    if err := zuptsdk.Keygen("alice.pub", "alice.priv"); err != nil {
+//	    if err := vuptsdk.Keygen("alice.pub", "alice.priv"); err != nil {
 //	        panic(err)
 //	    }
-//	    blob, err := zuptsdk.Encrypt("alice.pub", []byte("Hello"))
+//	    blob, err := vuptsdk.Encrypt("alice.pub", []byte("Hello"))
 //	    if err != nil {
 //	        panic(err)
 //	    }
-//	    plain, err := zuptsdk.Decrypt("alice.priv", blob)
+//	    plain, err := vuptsdk.Decrypt("alice.priv", blob)
 //	    if err != nil {
 //	        panic(err)
 //	    }
 //	    fmt.Printf("%s\n", plain) // "Hello"
 //	}
-package zuptsdk
+package vuptsdk
 
 /*
-#cgo pkg-config: zuptsdk
-#cgo LDFLAGS: -lzuptsdk
+#cgo pkg-config: vuptsdk
+#cgo LDFLAGS: -lvuptsdk
 #include <zuptsdk.h>
 #include <zuptsdk_easy.h>
 #include <stdlib.h>
@@ -42,14 +42,14 @@ import (
 	"unsafe"
 )
 
-// Error wraps a libzuptsdk error code.
+// Error wraps a libvuptsdk error code.
 type Error struct {
 	Code    int
 	Message string
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("libzuptsdk: code %d: %s", e.Code, e.Message)
+	return fmt.Sprintf("libvuptsdk: code %d: %s", e.Code, e.Message)
 }
 
 func check(rc C.int, op string) error {
@@ -60,7 +60,7 @@ func check(rc C.int, op string) error {
 	return &Error{Code: int(rc), Message: fmt.Sprintf("%s: %s", op, msg)}
 }
 
-// Version returns the libzuptsdk runtime version (e.g. "2.1.5").
+// Version returns the libvuptsdk runtime version (e.g. "2.1.5").
 func Version() string {
 	return C.GoString(C.zuptsdk_version_string())
 }
