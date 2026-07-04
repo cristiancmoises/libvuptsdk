@@ -94,11 +94,15 @@ int zuptsdk_easy_decrypt(const char *recipient_privkey_path,
 Decrypts a blob produced by `easy_encrypt` using the recipient's private
 key. Returns failure (non-zero rc) on:
 - Tampered ciphertext (MAC verify fail) — guaranteed detection
-- Wrong private key (KEM-decaps fails or commitment fails)
+- Wrong private key — surfaces as a MAC/commitment failure. ML-KEM-768 uses
+  FIPS 203 **implicit rejection**: decapsulation always succeeds and returns a
+  pseudorandom shared secret for a bad key/ciphertext, so the mismatch is
+  caught by the downstream AEAD MAC, not by a distinct "KEM decapsulation
+  failure" code.
 - Truncated/malformed blob (early-reject)
 
 **Constant-time guarantees**: MAC-fail vs. valid-decrypt timing differs by
-<2% (see AUDIT.md "Test 6 — Side-channel timing variance"). The library
+<2% (see AUDIT.md "Test 7 — Side-channel timing variance"). The library
 does not leak *why* a decrypt failed to a network observer.
 
 **Parameters**:
@@ -345,12 +349,16 @@ function. Useful for:
 | -3 | `ZUPTSDK_ERR_IO` | file not found, permission denied, etc. |
 | -4 | `ZUPTSDK_ERR_NO_MEMORY` | malloc failed |
 | -5 | `ZUPTSDK_ERR_BUFFER_TOO_SMALL` | output buffer too small |
-| -10 | `ZUPTSDK_ERR_AUTH_FAIL` | MAC verify failed (tamper or wrong key) |
-| -11 | `ZUPTSDK_ERR_FORMAT` | not a libzuptsdk blob, or version too new |
-| -12 | `ZUPTSDK_ERR_KEM_FAIL` | ML-KEM decapsulation failure |
-| -20 | `ZUPTSDK_ERR_NOT_IMPLEMENTED` | feature not enabled in this build |
+| -10 | `ZUPTSDK_ERR_BUFFER_TOO_SMALL` | output buffer insufficient |
+| -11 | `ZUPTSDK_ERR_NOT_ENCRYPTED` | tried to decrypt an unencrypted archive |
+| -12 | `ZUPTSDK_ERR_PASSWORD_REQUIRED` | archive needs a password but none supplied |
+| -13 | `ZUPTSDK_ERR_PQ_KEY_REQUIRED` | archive needs a PQ key but none supplied |
 
-For full constants, see `include/zuptsdk.h`.
+> **Authoritative list:** `include/zuptsdk.h` (`zuptsdk_error_t`) is the source
+> of truth; the codes above mirror it. Note there is **no** "KEM decapsulation
+> failure" code — by design (implicit rejection), a wrong key or tampered
+> ciphertext is reported as the MAC/authentication failure `ZUPTSDK_ERR_BAD_MAC`
+> (or `ZUPTSDK_ERR_BAD_PASSWORD` for password mode), never as a KEM-level error.
 
 ---
 

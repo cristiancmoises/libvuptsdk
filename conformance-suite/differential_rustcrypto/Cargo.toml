@@ -1,0 +1,8 @@
+[package]
+name = "rustdiff768"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+ml-kem = { version = "0.2", features = ["zeroize"] }
+rand = "0.8"
+hex = "0.4"
