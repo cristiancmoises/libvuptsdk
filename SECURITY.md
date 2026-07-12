@@ -193,6 +193,16 @@ it explicitly rather than claim audits we haven't paid for.
    constant-time. For untrusted-coresidency threat models, build with the
    Jasmin backend or use the XChaCha20-Poly1305 AEAD (the default for new
    archives), which has no secret-dependent table lookups.
+8. **VaptVupt codec archive format: from-source vs prebuilt.** The embedded
+   VaptVupt codec is synced to upstream v2.48.2, whose encoder emits modern
+   Huffman literal formats (lit_fmt=3/4) that the canonical prebuilt's older
+   embedded decoder cannot read. An archive compressed with the codec by the
+   from-source library may therefore fail to extract via the prebuilt (text at
+   BALANCED/EXTREME). This is a compatibility limitation, not a confidentiality
+   issue — the codec sits **inside** the AEAD envelope, so a malformed frame
+   never reaches the decoder unless already authenticated. Self-roundtrip
+   within either library is unaffected; full interop requires regenerating the
+   prebuilt from v2.48.2 (same action as limitation 6). See CHANGELOG 2.0.2.
 
 ---
 
