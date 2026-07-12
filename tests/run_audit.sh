@@ -22,11 +22,16 @@ CANON_LIB="prebuilt/libvuptsdk.so.2.0.0"
 [ -f "$SOURCE_LIB" ] && chk PASS "Source build artifact present" || chk FAIL "Source build artifact present"
 [ -f "$CANON_LIB" ] && chk PASS "Canonical binary present" || chk FAIL "Canonical binary present"
 
-# A2. Architecture matches
-SRC_ARCH=$(file "$SOURCE_LIB" | grep -oE "x86-64|aarch64|ARM64" | head -1)
-CAN_ARCH=$(file "$CANON_LIB" | grep -oE "x86-64|aarch64|ARM64" | head -1)
-[ "$SRC_ARCH" = "$CAN_ARCH" ] && chk PASS "Architecture matches ($SRC_ARCH)" \
-    || chk FAIL "Architecture mismatch: source=$SRC_ARCH canonical=$CAN_ARCH"
+# A2. Architecture matches. Use readelf (always present alongside nm), not
+# file(1) which may be missing — and require a NON-EMPTY match so two failed
+# probes can never compare equal and count as a vacuous pass.
+SRC_ARCH=$(readelf -h "$SOURCE_LIB" 2>/dev/null | awk -F: '/Machine/{gsub(/^[ \t]+/,"",$2); print $2}')
+CAN_ARCH=$(readelf -h "$CANON_LIB" 2>/dev/null | awk -F: '/Machine/{gsub(/^[ \t]+/,"",$2); print $2}')
+if [ -n "$SRC_ARCH" ] && [ "$SRC_ARCH" = "$CAN_ARCH" ]; then
+    chk PASS "Architecture matches ($SRC_ARCH)"
+else
+    chk FAIL "Architecture mismatch: source='$SRC_ARCH' canonical='$CAN_ARCH'"
+fi
 
 # A3. SONAME format correct
 SRC_SONAME=$(readelf -d "$SOURCE_LIB" 2>/dev/null | grep SONAME | awk '{print $NF}' | tr -d '[]')

@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Constant-time verification for ML-KEM-768 (dudect + ctgrind). Run from a
 # libvuptsdk checkout with this suite inside it. Requires valgrind + gcc.
 #

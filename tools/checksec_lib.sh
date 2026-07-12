@@ -89,8 +89,9 @@ echo "Symbol versions:    ✓ $VERS ABI versions ($VERS_LIST)"
 SONAME=$(readelf -d "$LIB" | grep "SONAME" | grep -oE "\[.*\]" | head -1)
 echo "SONAME:             $SONAME"
 
-# 9. Stripped?
-if file "$LIB" | grep -q "not stripped"; then
+# 9. Stripped? readelf-based: file(1) may be absent, and its failure must not
+# silently fall through to the "stripped" (pass) branch.
+if readelf -S "$LIB" 2>/dev/null | grep -qE '\.symtab|\.debug_info'; then
     echo "Debug info:         ⚠ NOTE - not stripped (debug info present)"
     WARN=$((WARN+1))
 else

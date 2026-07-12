@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Bidirectional differential: libvuptsdk ML-KEM-768 vs kyber-py (independent
 FIPS 203 impl). Requires a compiled `kd` helper (see build_kd.sh). Exit 0 iff
 all shared secrets agree byte-for-byte in both directions."""

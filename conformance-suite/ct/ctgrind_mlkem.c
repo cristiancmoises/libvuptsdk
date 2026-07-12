@@ -1,4 +1,6 @@
-/* ctgrind-style constant-time check for libvuptsdk ML-KEM-768 (Valgrind).
+/*
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ * ctgrind-style constant-time check for libvuptsdk ML-KEM-768 (Valgrind).
  *
  * Method (Langley's ctgrind, as used by pqclean/BoringSSL): mark secret bytes
  * as UNDEFINED via VALGRIND_MAKE_MEM_UNDEFINED, run the primitive under

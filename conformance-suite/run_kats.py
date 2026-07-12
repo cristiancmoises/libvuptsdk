@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Run the official NIST ACVP ML-KEM-768 KATs against the compiled `katz`
 driver over the committed vectors. Exit 0 iff every committed vector runs AND
 passes. The suite covers all five ACVP functions: keyGen, encapsulation,
