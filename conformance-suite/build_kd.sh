@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Build the `kd` helper used by the differential runners (real system RNG).
 set -e
 gcc -O2 -Iinclude -Isrc "$(dirname "$0")/kd_helper.c" \

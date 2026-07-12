@@ -1,4 +1,6 @@
-/* dudect-style constant-time statistical test for zupt_mlkem768_decaps.
+/*
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ * dudect-style constant-time statistical test for zupt_mlkem768_decaps.
  *
  * Methodology (Reparaz, Balasch, Verbauwhede — "Dude, is my code constant
  * time?", DATE 2017): two input classes, randomly interleaved, timed with a

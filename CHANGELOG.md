@@ -60,6 +60,29 @@ at the ABI level (see README.md "Versioning").
   memory-safety error (ASan clean). To be fixed upstream in vaptvupt-codec;
   the SDK mirrors upstream verbatim rather than forking the codec.
 
+### Audit fixes (full `audit-all` sweep, 2026-07-12)
+
+- **`make audit-licenses` was failing**: the 8 conformance-suite sources/
+  scripts added in 2.0.1 lacked the AGPL SPDX header the gate requires. Headers
+  added; gate back to zero missing.
+- **Vacuous-pass bug in `tests/run_audit.sh`**: the architecture check shelled
+  out to `file(1)`; on systems without it, both probes returned empty strings,
+  and empty == empty **passed** the check ("Architecture matches ()"). Now uses
+  `readelf -h` (present wherever `nm`/`readelf` already are) and requires a
+  non-empty match, so a failed probe can no longer masquerade as a pass.
+- **Same class of bug in `tools/checksec_lib.sh`**: the stripped-binary check
+  used `file(1)` and silently reported "✓ stripped" when `file` was absent.
+  Now section-based (`readelf -S` for `.symtab`/`.debug_info`). This exposed
+  that the canonical prebuilt actually ships **full DWARF debug info and a
+  symbol table** (previously mis-reported as stripped) — informational WARN;
+  `make install` already strips at install time.
+- Re-verified after fixes: license 0 missing; symbol audit 13/13 (arch now
+  genuinely compared); checksec 0 failures on both libraries; adversarial fuzz
+  suite all green — tamper 1000/1000 detected, multi-tamper 0 undetected in
+  10,000, wrong-key 2450/2450 rejected, format fuzz 0 accepts / 0 crashes in
+  50,000, key isolation 0 leaks in 129,300 trials, timing variance MAC-fail vs
+  valid-decrypt medians within 0.2%.
+
 ---
 
 ## [2.0.1] — 2026-07-04

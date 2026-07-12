@@ -1,4 +1,6 @@
-/* ML-KEM-768 ACVP Known-Answer-Test driver for libvuptsdk (FIPS 203).
+/*
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ * ML-KEM-768 ACVP Known-Answer-Test driver for libvuptsdk (FIPS 203).
  *
  * Overrides the library's zupt_random_bytes with a seed-injecting stub so
  * keygen/encaps run deterministically on the vectors' (d,z)/m. Prints "1" for
