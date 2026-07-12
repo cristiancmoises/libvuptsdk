@@ -7,6 +7,61 @@ at the ABI level (see README.md "Versioning").
 
 ---
 
+## [2.0.2] — 2026-07-12
+
+### Changed
+
+- **Synced the embedded VaptVupt codec to upstream v2.48.2**
+  (`git.securityops.co/cristiancmoises/vaptvupt-codec`). The core codec files
+  (`src/vv_ans.c`, `vv_decoder.c`, `vv_encoder.c`, `vv_huffman.c`, `vv_simd.c`,
+  `vv_xxh64.c` and the `vv_*`/`vaptvupt.h` headers) are now **verbatim** copies
+  of v2.48.2, differing only in the SPDX tag (AGPL, per this repo's license
+  gate). Brings the Sprint 118 encoder buffer scrubbing (`vv_secure_zero`
+  before `free`), Sprint 117/118 hardened-build (`-fsanitize=integer`)
+  cleanliness, and the Sprint 120/121 cost-aware lazy-parser ratio gains
+  (aggregate now −1.07% vs zstd-3). Upstream's `tests/test_zupt_integration.c`
+  (TEST19, 9 cases) passes against the synced tree.
+
+### Fixed
+
+- **VaptVupt fast-level (≤2) archives were undecodable (data loss).** The
+  Zupt wrapper set `format_v2 = 1` unconditionally, but `format_v2` + the
+  `ULTRA_FAST` mode used for levels ≤2 produces a frame that fails to decode
+  with `VV_ERR_OVERFLOW` in every codec version. `vvz_compress` now sets
+  `format_v2 = 0` (also the safest choice for cross-decoder compatibility —
+  see caveat below). Verified: all six representative payload classes now
+  round-trip at levels 1/5/9 (18/18).
+
+### Integration notes
+
+- `vvz_compress` follows the v2.48.2 `ZUPT_INTEGRATION.md` guidance:
+  `checksum = 0` on encode (Zupt's outer AEAD/HMAC authenticates the bytes;
+  the decode path already passed `VV_DECOMPRESS_SKIP_CHECKSUM`), and
+  `compat_v246_5_decoder = 1` to suppress the newest literal format (lit_fmt=4)
+  for broader decoder-version compatibility.
+
+### Known limitation (prebuilt archive format)
+
+- The v2.48.2 encoder emits modern Huffman literal formats (**lit_fmt=3/4**)
+  that the canonical prebuilt's **older embedded decoder predates and cannot
+  read**; no encoder option can suppress lit_fmt=3. Consequently an archive
+  compressed with the VaptVupt codec by the **from-source** library may not
+  extract via the **prebuilt** for text at BALANCED/EXTREME levels. Self-
+  roundtrip within either library is unaffected. Full source↔prebuilt archive
+  interop requires regenerating the prebuilt from v2.48.2 — the same
+  regenerate-the-prebuilt action already noted for the ML-KEM fix (2.0.1).
+
+### Upstream finding (reported, not forked)
+
+- Decoding a crafted corrupt **huf4** frame (`lit_fmt=4` inflate) triggers
+  UBSan shift-exponent errors in `vv_ans.c` — reproduced **identically in
+  pristine upstream v2.48.2**, so it is an upstream issue, not a sync
+  regression. The decoder still returns a clean `VV_ERR_CORRUPT` with no
+  memory-safety error (ASan clean). To be fixed upstream in vaptvupt-codec;
+  the SDK mirrors upstream verbatim rather than forking the codec.
+
+---
+
 ## [2.0.1] — 2026-07-04
 
 Security-correctness release for the ML-KEM-768 layer. No public ABI change
