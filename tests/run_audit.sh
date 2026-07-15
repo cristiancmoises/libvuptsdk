@@ -15,8 +15,12 @@ chk() {
 
 echo "  [libvuptsdk audit — source build vs canonical binary]"
 
-SOURCE_LIB="build/libvuptsdk-base.so.2.0.0"
-CANON_LIB="prebuilt/libvuptsdk.so.2.0.0"
+# Version-agnostic: pick the real versioned artifact so a version bump does not
+# require editing this script (and cannot vacuously "pass" on a missing file).
+SOURCE_LIB=$(ls build/libvuptsdk-base.so.2.* 2>/dev/null | grep -E '\.so\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+CANON_LIB=$(ls prebuilt/libvuptsdk.so.2.* 2>/dev/null | grep -E '\.so\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+[ -z "$SOURCE_LIB" ] && SOURCE_LIB="build/libvuptsdk-base.so.MISSING"
+[ -z "$CANON_LIB" ] && CANON_LIB="prebuilt/libvuptsdk.so.MISSING"
 
 # A1. Both libraries exist
 [ -f "$SOURCE_LIB" ] && chk PASS "Source build artifact present" || chk FAIL "Source build artifact present"

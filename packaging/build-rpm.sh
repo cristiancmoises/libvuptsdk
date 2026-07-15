@@ -11,7 +11,8 @@
 set -e
 cd "$(dirname "$0")/.."
 
-VERSION="${VERSION:-2.0.0}"
+# Derive the version from the Makefile (single source of truth) unless overridden.
+VERSION="${VERSION:-$(make -s printversion)}"
 SOVERSION="${SOVERSION:-2}"
 
 # 1. Build source tarball

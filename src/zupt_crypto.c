@@ -21,6 +21,10 @@
   #include <sys/syscall.h>
   #include <unistd.h>
 #endif
+#ifndef _WIN32
+  #include <fcntl.h>
+  #include <sys/stat.h>
+#endif
 
 /* ═══════════════════════════════════════════════════════════════════
  * RANDOM BYTES (OS-native CSPRNG — NO FALLBACK)
@@ -498,9 +502,18 @@ int zupt_hybrid_keygen(const char *keyfile) {
     zupt_random_bytes(x_sk, 32);
     zupt_x25519_base(x_pk, x_sk);
 
-    /* Write private key file */
+    /* Write private key file. Create it owner-only (0600) from the start so the
+     * ML-KEM/X25519 secret keys are never world-readable in a shared directory
+     * (e.g. TMPDIR) — the default umask would otherwise yield 0644. */
+#ifdef _WIN32
     FILE *f = fopen(keyfile, "wb");
-    if (!f) return -1;
+    if (!f) { zupt_secure_wipe(ml_sk, sizeof(ml_sk)); zupt_secure_wipe(x_sk, 32); return -1; }
+#else
+    int kfd = open(keyfile, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (kfd < 0) { zupt_secure_wipe(ml_sk, sizeof(ml_sk)); zupt_secure_wipe(x_sk, 32); return -1; }
+    FILE *f = fdopen(kfd, "wb");
+    if (!f) { close(kfd); zupt_secure_wipe(ml_sk, sizeof(ml_sk)); zupt_secure_wipe(x_sk, 32); return -1; }
+#endif
 
     size_t total = ZKEY_PRIV_SIZE;
     uint8_t *buf = (uint8_t *)calloc(total + 8, 1); /* +8 for checksum */

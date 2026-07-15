@@ -7,6 +7,68 @@ at the ABI level (see README.md "Versioning").
 
 ---
 
+## [2.0.3] — 2026-07-15
+
+Hardening + release-hygiene patch. No public ABI change (`ZUPTSDK_1.0` /
+`ZUPTSDK_2.1` symbol sets untouched); the codec stays verbatim-synced to
+VaptVupt v2.48.2. All findings below were surfaced by an adversarially-verified
+multi-agent review of the shippable source and confirmed by rebuild + tests.
+
+### Security (local information disclosure)
+
+- **Secret material was written world-readable to a shared TMPDIR.** On a
+  multi-user host, files created by the SDK inherited the default umask (mode
+  0644 / dir 0755), so any other local user could read them during the
+  operation window:
+  - The **hybrid private key** (`ml_sk` + `x_sk`) written by
+    `zupt_hybrid_keygen` — now created mode **0600** via
+    `open(O_CREAT, 0600)` before any bytes are written (`src/zupt_crypto.c`).
+  - The **caller's plaintext** staged by `zuptsdk_compress_buffer` and the
+    streaming drain path — now created **0600** via a new `zsdk_fopen_private`
+    helper (`src/zuptsdk.c`).
+  - The **decrypted output** extracted by `zuptsdk_extract_buffer` — its scratch
+    directory is now `chmod 0700` immediately after creation.
+  Verified: with a permissive `umask(0)` the generated key file is 0600, and the
+  compress→extract roundtrip (incl. empty and 300 KB inputs) is unchanged and
+  ASan/UBSan-clean.
+
+### Robustness
+
+- `zuptsdk_verify` no longer ignores its temp-archive `fwrite` return — a short
+  write (e.g. `ENOSPC`) was misreported downstream as archive tampering/
+  corruption instead of an I/O error.
+- Added the missing `ftell`-result guards on the archive/recovered-file slurp
+  sites (`sz < 0` → I/O error rather than a `SIZE_MAX` allocation); the
+  recovered-file path now allocates ≥1 byte so a legitimate empty extracted file
+  round-trips on `malloc(0)→NULL` platforms instead of a spurious `NO_MEMORY`.
+- `zupt_hybrid_keygen` now wipes `ml_sk`/`x_sk` on its file-open error paths
+  (previously returned `-1` leaving the secrets on the stack).
+
+### Packaging / build hygiene
+
+- **Version is now single-sourced.** New `make printversion` target;
+  `packaging/build-deb.sh` and `build-rpm.sh` derive `VERSION` from it instead of
+  a hardcoded `2.0.0`, and fail loudly if an override doesn't match the build
+  (previously produced mislabeled packages or died at the install step).
+- `tests/run_audit.sh` selects the library artifacts by glob instead of a
+  hardcoded `2.0.0` filename, so a version bump can't silently break the audit
+  (and a missing file can't vacuously pass).
+- License gate: added the missing SPDX header to
+  `.forgejo/workflows/mlkem-conformance.yaml`, and taught `make audit-licenses`
+  to also scan `*.yaml` (it only checked `*.yml`) and to skip `.git/`.
+
+### Versioning
+
+- Consolidated the from-source version to **2.0.3**: `Makefile` `SDK_FULLVERSION`
+  and the header `ZUPTSDK_VERSION_*` / `zuptsdk_version_string()` now agree
+  (previously Makefile 2.0.0 vs header 1.0.0). The canonical **prebuilt** binary
+  is the frozen build re-versioned to `libvuptsdk.so.2.0.3` (SONAME unchanged at
+  `libvuptsdk.so.2`); it still reports `2.1.5` at runtime from its own
+  compile-time value and has **not** been recompiled from post-2.0.0 source — see
+  the prebuilt caveats in SECURITY.md (limitations 6 and 8).
+
+---
+
 ## [2.0.2] — 2026-07-12
 
 ### Changed

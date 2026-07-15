@@ -27,22 +27,22 @@
 ### Debian / Ubuntu / Mint
 
 ```bash
-sudo apt install ./libvuptsdk2_2.0.0_amd64.deb ./libvuptsdk-dev_2.0.0_amd64.deb
+sudo apt install ./libvuptsdk2_2.0.3_amd64.deb ./libvuptsdk-dev_2.0.3_amd64.deb
 ```
 
 ### Fedora / RHEL / openSUSE
 
 ```bash
-tar -xzf libvuptsdk-2.0.0.srpm.tar.gz
+tar -xzf libvuptsdk-2.0.3.srpm.tar.gz
 rpmbuild -bb SPECS/libvuptsdk.spec
-sudo rpm -i ~/rpmbuild/RPMS/x86_64/libvuptsdk-2.0.0-*.rpm
+sudo rpm -i ~/rpmbuild/RPMS/x86_64/libvuptsdk-2.0.3-*.rpm
 ```
 
 ### From source
 
 ```bash
-tar -xzf libvuptsdk-2.0.0.tar.gz
-cd libvuptsdk-2.0.0
+tar -xzf libvuptsdk-2.0.3.tar.gz
+cd libvuptsdk-2.0.3
 make
 sudo make install                  # → /usr/local/lib + /usr/local/include
 sudo make install PREFIX=/opt/zupt # custom prefix
@@ -51,7 +51,7 @@ sudo make install PREFIX=/opt/zupt # custom prefix
 Verify the install:
 
 ```bash
-pkg-config --modversion vuptsdk    # → 2.0.0
+pkg-config --modversion vuptsdk    # → 2.0.3
 echo '#include <zuptsdk.h>
 int main(){printf("%s\n",zuptsdk_version_string());}' \
   | cc -x c - $(pkg-config --cflags --libs vuptsdk) -o /tmp/v && /tmp/v
@@ -152,7 +152,7 @@ zuptsdk_secure_zero(master_key, sizeof(master_key));
 
 # Language bindings
 
-All bindings are tested against the canonical `libvuptsdk.so.2.0.0` and live in [`bindings/`](bindings/).
+All bindings are tested against the canonical `libvuptsdk.so.2` and live in [`bindings/`](bindings/).
 
 ## Python
 
@@ -433,7 +433,8 @@ cd conformance-suite && python3 run_kats.py ../katz     # expect 80/80
 
 > **Two important caveats.**
 > 1. **This conformance holds for the from-source library.** The canonical
->    `prebuilt/libvuptsdk.so.2.0.0` predates the 2026-07-02 fix
+>    prebuilt binary (`prebuilt/libvuptsdk.so.2`, re-versioned to 2.0.3 but the
+>    frozen original build) predates the 2026-07-02 fix
 >    (see [`MLKEM_CONFORMANCE_FIX.md`](MLKEM_CONFORMANCE_FIX.md)) and is **not**
 >    rebuilt from this patched source — it must be regenerated and re-audited
 >    before it can be claimed conformant.
@@ -512,7 +513,7 @@ The contract:
 - **New symbols added in 2.x go into `ZUPTSDK_2.x` blocks.** Old code linked against `ZUPTSDK_1.0` keeps working.
 - Any incompatible change is a `libvuptsdk.so.3` event (major SONAME bump, separate parallel-installable library).
 
-Current: **2.0.0** (ABI: ZUPTSDK_1.0 + ZUPTSDK_2.1).
+Current: **2.0.3** (ABI: ZUPTSDK_1.0 + ZUPTSDK_2.1).
 
 ---
 
@@ -559,4 +560,4 @@ For commercial licensing inquiries: `zupt@riseup.net`.
 
 ---
 
-**libvuptsdk 2.0.0** · Author: Cristian Cezar Moisés · License: AGPL-3.0-or-later
+**libvuptsdk 2.0.3** · Author: Cristian Cezar Moisés · License: AGPL-3.0-or-later

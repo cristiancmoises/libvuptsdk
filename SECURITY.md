@@ -178,7 +178,7 @@ it explicitly rather than claim audits we haven't paid for.
    two defects in `src/zupt_mlkem.c` and is verified against the official
    NIST ACVP vectors (80/80) and two independent implementations. That
    verification covers the **from-source** library. The canonical
-   `prebuilt/libvuptsdk.so.2.0.0` predates the fix and must be regenerated
+   `prebuilt/libvuptsdk.so.2` (the frozen build) predates the fix and must be regenerated
    from the patched tree (and re-audited) before it can be claimed
    conformant. **Migration hazard:** an ML-KEM-hybrid archive or keypair
    produced by a *pre-fix* build will not interoperate with a *post-fix*
