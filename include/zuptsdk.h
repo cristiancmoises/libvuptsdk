@@ -1,12 +1,13 @@
 /*
- * libvuptsdk — Public C ABI for the Zupt backup compression library
+ * libvuptsdk — Public C ABI for the VaptVupt backup compression library
  *
  * Copyright (c) 2026 Cristian Cezar Moisés
  * SPDX-License-Identifier: AGPL-3.0-or-later
  *
- * Repository: https://github.com/cristiancmoises/zupt
- * Website:    https://zupt.securityops.co
- * Contact:    zupt@riseup.net
+ * Repository:     https://git.securityops.co/cristiancmoises/libvuptsdk
+ * Parent project: https://git.securityops.co/cristiancmoises/vaptvupt
+ * Codec:          https://git.securityops.co/cristiancmoises/vaptvupt-codec
+ * Contact:        zupt@riseup.net
  *
  * --------------------------------------------------------------------------
  * STABILITY GUARANTEE
@@ -96,7 +97,7 @@ extern "C" {
       ZUPTSDK_VERSION_PATCH >= (pat)))
 
 /**
- * Return the runtime version string of the linked library, e.g. "1.0.0".
+ * Return the runtime version string of the linked library, e.g. "2.0.3".
  * The returned pointer is to static storage and must NOT be freed.
  *
  * Use this with the compile-time ZUPTSDK_VERSION_STRING to detect mismatch

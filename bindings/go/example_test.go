@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	zupt "github.com/cristiancmoises/libvuptsdk/bindings/go"
+	zupt "git.securityops.co/cristiancmoises/libvuptsdk/bindings/go"
 )
 
 func ExampleVersion() {

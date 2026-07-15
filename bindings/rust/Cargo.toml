@@ -6,8 +6,8 @@ edition = "2021"
 authors = ["Cristian Cezar Moisés <zupt@riseup.net>"]
 license = "AGPL-3.0-or-later"
 description = "Rust bindings for libvuptsdk: post-quantum hybrid cryptography"
-repository = "https://github.com/cristiancmoises/libvuptsdk"
-homepage = "https://github.com/cristiancmoises/libvuptsdk"
+repository = "https://git.securityops.co/cristiancmoises/libvuptsdk"
+homepage = "https://git.securityops.co/cristiancmoises/libvuptsdk"
 keywords = ["cryptography", "post-quantum", "ml-kem", "x25519", "argon2"]
 categories = ["cryptography", "api-bindings"]
 

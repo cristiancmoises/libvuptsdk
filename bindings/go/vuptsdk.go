@@ -9,7 +9,7 @@
 //
 //	import (
 //	    "fmt"
-//	    "github.com/cristiancmoises/libvuptsdk/bindings/go"
+//	    "git.securityops.co/cristiancmoises/libvuptsdk/bindings/go"
 //	)
 //
 //	func main() {

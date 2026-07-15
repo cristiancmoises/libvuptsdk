@@ -7,6 +7,24 @@ at the ABI level (see README.md "Versioning").
 
 ---
 
+## [Unreleased]
+
+### Documentation
+
+- **Retargeted project links after the `zupt` → `vaptvupt` rename.** All
+  references to the parent project now point at
+  `git.securityops.co/cristiancmoises/vaptvupt`, and the embedded codec at
+  `git.securityops.co/cristiancmoises/vaptvupt-codec`. SDK self-links moved to
+  the canonical `git.securityops.co/cristiancmoises/libvuptsdk`
+  (GitHub/Codeberg are documented mirrors; GitHub `/blob/main/` file links
+  rewritten to the Gitea `/src/branch/main/` form). Added a **Repositories &
+  related projects** section to `README.md`, corrected the `zuptsdk.h` header
+  banner (Repository / Parent project / Codec), and dropped now-inaccurate
+  "GitHub issues" phrasing (the canonical forge is Forgejo). The security
+  contact email is unchanged.
+
+---
+
 ## [2.0.3] — 2026-07-15
 
 Hardening + release-hygiene patch. No public ABI change (`ZUPTSDK_1.0` /

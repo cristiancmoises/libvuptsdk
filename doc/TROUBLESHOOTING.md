@@ -229,9 +229,9 @@ If you've ruled out the above and believe you've found a real bug:
    make test-asan
    ```
 5. **For security issues**: email `zupt@riseup.net` directly. Do not file
-   public GitHub issues.
+   public issues.
 
-For non-security bugs: <https://github.com/cristiancmoises/libvuptsdk/issues>
+For non-security bugs: <https://git.securityops.co/cristiancmoises/libvuptsdk/issues>
 
 ---
 

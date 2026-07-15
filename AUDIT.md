@@ -527,14 +527,14 @@ library stands. The line between "internal audit" and "external audit" is
 intentionally not blurred.
 
 For the methodology document used in the parent zupt project, see
-[zupt FORMAL_AUDIT_PROMPT.md](https://github.com/cristiancmoises/zupt/blob/main/FORMAL_AUDIT_PROMPT.md).
+[zupt FORMAL_AUDIT_PROMPT.md](https://git.securityops.co/cristiancmoises/vaptvupt/src/branch/main/FORMAL_AUDIT_PROMPT.md).
 
 ---
 
 ## How to reproduce this audit
 
 ```bash
-git clone https://github.com/cristiancmoises/libvuptsdk
+git clone https://git.securityops.co/cristiancmoises/libvuptsdk
 cd libvuptsdk
 
 # 1. Build + run the standard test suite (30 properties)
