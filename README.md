@@ -7,7 +7,9 @@
 
 **Post-quantum hybrid cryptography for production C, C++, Python, Node.js, Go, and Rust applications.**
 
-`libvuptsdk` is the cryptographic backbone of the [Zupt](https://github.com/cristiancmoises/zupt) backup utility. The library is also designed for **standalone use**: any application that needs strong, future-proof, audited encryption can link against it.
+`libvuptsdk` is the cryptographic backbone of the [VaptVupt](https://git.securityops.co/cristiancmoises/vaptvupt) backup utility (formerly *Zupt*). The library is also designed for **standalone use**: any application that needs strong, future-proof, audited encryption can link against it.
+
+> **Canonical repository:** [`git.securityops.co/cristiancmoises/libvuptsdk`](https://git.securityops.co/cristiancmoises/libvuptsdk), mirrored to [GitHub](https://github.com/cristiancmoises/libvuptsdk) and [Codeberg](https://codeberg.org/berkeley/libvuptsdk). See [Repositories & related projects](#repositories--related-projects).
 
 ## Why libvuptsdk?
 
@@ -231,7 +233,7 @@ import (
     "fmt"
     "log"
 
-    zupt "github.com/cristiancmoises/libvuptsdk/bindings/go"
+    zupt "git.securityops.co/cristiancmoises/libvuptsdk/bindings/go"
 )
 
 func main() {
@@ -521,7 +523,7 @@ Current: **2.0.3** (ABI: ZUPTSDK_1.0 + ZUPTSDK_2.1).
 
 See [`SECURITY.md`](SECURITY.md) for the full threat model, cryptographic construction details, side-channel mitigations, and known limitations.
 
-**Reporting vulnerabilities**: email **`zupt@riseup.net`**. Do not file public GitHub issues for security bugs. PGP key: TBD.
+**Reporting vulnerabilities**: email **`zupt@riseup.net`**. Do not file public issues for security bugs. PGP key: TBD.
 
 **Audited**:
 
@@ -551,10 +553,29 @@ For commercial licensing inquiries: `zupt@riseup.net`.
 
 ---
 
+# Repositories & related projects
+
+The **VaptVupt** family (formerly *Zupt*) is developed on
+[`git.securityops.co`](https://git.securityops.co/cristiancmoises); GitHub and
+Codeberg are public mirrors.
+
+| Project | What it is | Canonical repository |
+|---|---|---|
+| **libvuptsdk** (this repo) | Post-quantum hybrid crypto SDK — the library you link against | [`git.securityops.co/cristiancmoises/libvuptsdk`](https://git.securityops.co/cristiancmoises/libvuptsdk) · mirrors: [GitHub](https://github.com/cristiancmoises/libvuptsdk), [Codeberg](https://codeberg.org/berkeley/libvuptsdk) |
+| **vaptvupt** | The backup utility (CLI + GUI) built on this SDK | [`git.securityops.co/cristiancmoises/vaptvupt`](https://git.securityops.co/cristiancmoises/vaptvupt) |
+| **vaptvupt-codec** | The standalone VaptVupt compression codec embedded here (`src/vv_*.c`) | [`git.securityops.co/cristiancmoises/vaptvupt-codec`](https://git.securityops.co/cristiancmoises/vaptvupt-codec) |
+
+The embedded codec is kept **verbatim-synced** to a tagged `vaptvupt-codec`
+release (currently **v2.48.2**); see [`CHANGELOG.md`](CHANGELOG.md) for the sync
+policy and provenance.
+
+---
+
 # See also
 
-- [zupt](https://github.com/cristiancmoises/zupt) — CLI + GUI built on libvuptsdk
-- [zupt SECURITY.md](https://github.com/cristiancmoises/zupt/blob/main/SECURITY.md) — threat model for the CLI
+- [VaptVupt](https://git.securityops.co/cristiancmoises/vaptvupt) — the backup utility (CLI + GUI) built on libvuptsdk
+- [VaptVupt SECURITY.md](https://git.securityops.co/cristiancmoises/vaptvupt/src/branch/main/SECURITY.md) — threat model for the CLI
+- [vaptvupt-codec](https://git.securityops.co/cristiancmoises/vaptvupt-codec) — the standalone compression codec
 - [Jasmin](https://github.com/jasmin-lang/jasmin) — verified-CT cryptography compiler used here
 - [NIST FIPS 203](https://csrc.nist.gov/pubs/fips/203/final) — ML-KEM specification
 

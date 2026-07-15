@@ -36,7 +36,7 @@ Version:        %{version}
 Release:        1%{?dist}
 Summary:        Post-quantum hybrid cryptography library
 License:        AGPLv3+
-URL:            https://github.com/cristiancmoises/libvuptsdk
+URL:            https://git.securityops.co/cristiancmoises/libvuptsdk
 Source0:        libvuptsdk-%{version}.tar.gz
 
 BuildRequires:  gcc make pkgconfig

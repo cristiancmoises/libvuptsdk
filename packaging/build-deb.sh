@@ -56,7 +56,7 @@ Architecture: ${ARCH}
 Depends: libc6 (>= 2.28)
 Maintainer: Cristian Cezar Moisés <zupt@riseup.net>
 Installed-Size: ${INSTALLED_SIZE}
-Homepage: https://github.com/cristiancmoises/libvuptsdk
+Homepage: https://git.securityops.co/cristiancmoises/libvuptsdk
 Description: Post-quantum hybrid cryptography runtime library
  libvuptsdk provides a stable C ABI for post-quantum hybrid encryption
  (ML-KEM-768 + X25519), authenticated encryption (XChaCha20-Poly1305 or
@@ -136,7 +136,7 @@ Architecture: ${ARCH}
 Depends: libvuptsdk${SOVERSION} (= ${VERSION})
 Maintainer: Cristian Cezar Moisés <zupt@riseup.net>
 Installed-Size: ${INSTALLED_SIZE_DEV}
-Homepage: https://github.com/cristiancmoises/libvuptsdk
+Homepage: https://git.securityops.co/cristiancmoises/libvuptsdk
 Description: Post-quantum hybrid cryptography development files
  Headers, static archive, pkg-config file, and development docs for
  libvuptsdk. Install this to build applications against libvuptsdk.

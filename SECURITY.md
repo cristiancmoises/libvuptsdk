@@ -4,12 +4,12 @@
 
 Email **zupt@riseup.net** with details of any suspected security issue.
 
-Do **not** file public GitHub issues for security bugs. Please allow
+Do **not** file public issues for security bugs. Please allow
 reasonable time for a fix before public disclosure (90 days standard,
 sooner for already-public information, longer for complex multi-party
 coordination).
 
-PGP key: TBD (will be published at https://github.com/cristiancmoises/libvuptsdk/blob/main/SECURITY.md once finalized)
+PGP key: TBD (will be published at https://git.securityops.co/cristiancmoises/libvuptsdk/src/branch/main/SECURITY.md once finalized)
 
 ---
 
