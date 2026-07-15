@@ -22,7 +22,7 @@
 
 SDK_VERSION_MAJOR = 2
 SDK_VERSION_MINOR = 0
-SDK_VERSION_PATCH = 0
+SDK_VERSION_PATCH = 3
 SDK_SOVERSION     = $(SDK_VERSION_MAJOR)
 SDK_FULLVERSION   = $(SDK_VERSION_MAJOR).$(SDK_VERSION_MINOR).$(SDK_VERSION_PATCH)
 
@@ -90,6 +90,11 @@ PREBUILT_LIB  = prebuilt/libvuptsdk.so.$(SDK_FULLVERSION)
 STAGED_LIB    = $(BUILD_DIR)/libvuptsdk.so.$(SDK_FULLVERSION)
 PKGCONFIG     = $(BUILD_DIR)/vuptsdk.pc
 LINKER_MAP    = zuptsdk.map
+
+# ── Version query (single source of truth for packaging scripts) ────
+.PHONY: printversion
+printversion:
+	@echo $(SDK_FULLVERSION)
 
 # ── Default target ──────────────────────────────────────────────────
 .PHONY: all
@@ -269,11 +274,11 @@ formal-audit:
 audit-licenses:
 	@MISSING=0; \
 	for f in $$(find . -type f \( -name '*.c' -o -name '*.h' -o -name '*.hpp' \
-	             -o -name '*.py' -o -name '*.sh' -o -name '*.yml' \
+	             -o -name '*.py' -o -name '*.sh' -o -name '*.yml' -o -name '*.yaml' \
 	             -o -name '*.jazz' -o -name '*.s' -o -name 'Makefile' \
 	             -o -name '*.map' \) \
 	             -not -path './build/*' -not -path './dist/*' \
-	             -not -path './prebuilt/*'); do \
+	             -not -path './prebuilt/*' -not -path './.git/*'); do \
 	    if ! grep -q "SPDX-License-Identifier: AGPL-3.0-or-later" "$$f"; then \
 	        echo "  ✗ $$f (missing or wrong SPDX)"; \
 	        MISSING=$$((MISSING+1)); \

@@ -65,6 +65,22 @@ static char *zsdk_strdup(const char *s) {
     return p;
 }
 
+/* Create a temp file for writing with owner-only (0600) permissions so that
+ * secret material (private keys, caller plaintext, in-flight archives) is never
+ * left world-readable in a shared TMPDIR. On POSIX this opens with mode 0600
+ * atomically (no 0644 window); on Windows it falls back to fopen. */
+static FILE *zsdk_fopen_private(const char *path) {
+#ifdef _WIN32
+    return fopen(path, "wb");
+#else
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd < 0) return NULL;
+    FILE *f = fdopen(fd, "wb");
+    if (!f) close(fd);
+    return f;
+#endif
+}
+
 /* ════════════════════════════════════════════════════════════════════════
  * Internal: thread-local error detail
  * ════════════════════════════════════════════════════════════════════════ */
@@ -727,7 +743,8 @@ int zuptsdk_compress_buffer(zuptsdk_ctx_t *ctx,
 
     char tmp_in[512];
     zsdk_tmp_path(tmp_in, sizeof(tmp_in), "zsdk_in");
-    FILE *f = fopen(tmp_in, "wb");
+    /* Caller plaintext — write 0600 so it is not world-readable in TMPDIR. */
+    FILE *f = zsdk_fopen_private(tmp_in);
     if (!f) return ZSDK_FAIL(ZUPTSDK_ERR_IO, "create temp input");
     if (fwrite(data, 1, data_sz, f) != data_sz) {
         fclose(f); unlink(tmp_in);
@@ -762,6 +779,7 @@ int zuptsdk_compress_buffer(zuptsdk_ctx_t *ctx,
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
+    if (sz <= 0) { fclose(f); unlink(tmp_arc); return ZSDK_FAIL(ZUPTSDK_ERR_IO, "archive ftell"); }
     uint8_t *buf = (uint8_t *)zsdk_malloc((size_t)sz);
     if (!buf) { fclose(f); unlink(tmp_arc); return ZSDK_FAIL(ZUPTSDK_ERR_NO_MEMORY, "archive buf"); }
     size_t got = fread(buf, 1, (size_t)sz, f);
@@ -819,6 +837,11 @@ int zuptsdk_extract_buffer(zuptsdk_ctx_t *ctx,
     zsdk_tmp_path(tmpdir, sizeof(tmpdir), "zsdk_x");
     if (zupt_mkdir(tmpdir) != 0)
         return ZSDK_FAIL(ZUPTSDK_ERR_IO, "mkdir %s", tmpdir);
+#ifndef _WIN32
+    /* Decrypted plaintext is written here before it is slurped back — restrict
+     * to owner-only (mkdir used 0755) so no other local user can read it. */
+    (void)chmod(tmpdir, 0700);
+#endif
 
     int rc = zuptsdk_extract_to_dir(ctx, archive, archive_sz, tmpdir, password, recipient_sk);
     if (rc != ZUPTSDK_OK) { rmdir(tmpdir); return rc; }
@@ -862,7 +885,10 @@ int zuptsdk_extract_buffer(zuptsdk_ctx_t *ctx,
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
-    uint8_t *buf = (uint8_t *)zsdk_malloc((size_t)sz);
+    if (sz < 0) { fclose(f); unlink(fpath); rmdir(tmpdir); return ZSDK_FAIL(ZUPTSDK_ERR_IO, "extracted ftell"); }
+    /* A recovered 0-byte file is legitimate (empty-input roundtrip); allocate at
+     * least 1 byte so malloc(0)->NULL platforms don't misreport NO_MEMORY. */
+    uint8_t *buf = (uint8_t *)zsdk_malloc((size_t)sz ? (size_t)sz : 1);
     if (!buf) { fclose(f); unlink(fpath); rmdir(tmpdir); return ZSDK_FAIL(ZUPTSDK_ERR_NO_MEMORY, "data buf"); }
     if (fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
         fclose(f); unlink(fpath); rmdir(tmpdir); zsdk_free_internal(buf);
@@ -881,7 +907,8 @@ int zuptsdk_extract_buffer(zuptsdk_ctx_t *ctx,
  * ════════════════════════════════════════════════════════════════════════ */
 
 static int zsdk_drain_to_file(zuptsdk_read_fn input, void *ud, const char *path) {
-    FILE *f = fopen(path, "wb");
+    /* May carry caller plaintext (compress) or archive bytes; keep it 0600. */
+    FILE *f = zsdk_fopen_private(path);
     if (!f) return ZSDK_FAIL(ZUPTSDK_ERR_IO, "create %s", path);
     uint8_t buf[65536];
     int64_t n;
@@ -970,6 +997,7 @@ int zuptsdk_decompress_stream(zuptsdk_ctx_t *ctx,
     FILE *f = fopen(arc_tmp, "rb");
     if (!f) { unlink(arc_tmp); return ZSDK_FAIL(ZUPTSDK_ERR_IO, "reopen archive"); }
     fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+    if (sz <= 0) { fclose(f); unlink(arc_tmp); return ZSDK_FAIL(ZUPTSDK_ERR_IO, "archive ftell"); }
     uint8_t *abuf = (uint8_t *)zsdk_malloc((size_t)sz);
     if (!abuf) { fclose(f); unlink(arc_tmp); return ZSDK_FAIL(ZUPTSDK_ERR_NO_MEMORY, "archive buf"); }
     size_t got = fread(abuf, 1, (size_t)sz, f);
@@ -1000,9 +1028,15 @@ int zuptsdk_verify(zuptsdk_ctx_t *ctx,
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
     char tmp[512];
     zsdk_tmp_path(tmp, sizeof(tmp), "zsdk_v");
-    FILE *f = fopen(tmp, "wb");
+    FILE *f = zsdk_fopen_private(tmp);
     if (!f) return ZSDK_FAIL(ZUPTSDK_ERR_IO, "write temp archive");
-    fwrite(archive, 1, archive_sz, f); fclose(f);
+    /* Check the write: a short write (e.g. ENOSPC) would truncate the archive
+     * and be misreported downstream as tampering/corruption instead of I/O. */
+    if (fwrite(archive, 1, archive_sz, f) != archive_sz) {
+        fclose(f); unlink(tmp);
+        return ZSDK_FAIL(ZUPTSDK_ERR_IO, "write temp archive");
+    }
+    fclose(f);
 
     zupt_options_t zopts;
     zsdk_apply_options(&zopts, NULL, ctx);

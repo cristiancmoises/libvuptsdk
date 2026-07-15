@@ -7,13 +7,20 @@
 set -e
 cd "$(dirname "$0")/.."
 
-VERSION="${VERSION:-2.0.0}"
+# Derive the version from the Makefile (single source of truth) unless the
+# caller overrides it, so packages can never be silently mislabeled on a bump.
+VERSION="${VERSION:-$(make -s printversion)}"
 SOVERSION="${SOVERSION:-2}"
 ARCH="${ARCH:-amd64}"
 
-# Build first if not already built
+# Build first if not already built. Pass VERSION through so an override that
+# doesn't match the Makefile fails loudly here rather than at the install step.
 if [ ! -f "build/libvuptsdk.so.${VERSION}" ]; then
     make
+fi
+if [ ! -f "build/libvuptsdk.so.${VERSION}" ]; then
+    echo "error: build/libvuptsdk.so.${VERSION} not produced — VERSION=$VERSION does not match the Makefile build" >&2
+    exit 1
 fi
 
 # ─── Runtime package: libvuptsdk2 ──────────────────────────────────

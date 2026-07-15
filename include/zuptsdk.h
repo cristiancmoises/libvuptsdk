@@ -83,10 +83,10 @@ extern "C" {
  * VERSION
  * ════════════════════════════════════════════════════════════════════════ */
 
-#define ZUPTSDK_VERSION_MAJOR 1
+#define ZUPTSDK_VERSION_MAJOR 2
 #define ZUPTSDK_VERSION_MINOR 0
-#define ZUPTSDK_VERSION_PATCH 0
-#define ZUPTSDK_VERSION_STRING "1.0.0"
+#define ZUPTSDK_VERSION_PATCH 3
+#define ZUPTSDK_VERSION_STRING "2.0.3"
 
 /* Compile-time version check helper (negative if header older than required) */
 #define ZUPTSDK_VERSION_AT_LEAST(maj, min, pat) \

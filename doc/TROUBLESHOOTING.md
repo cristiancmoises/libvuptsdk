@@ -70,7 +70,7 @@ The Python bindings tried `libvuptsdk.so.2`, `libvuptsdk.so`, and
 `ctypes.util.find_library('vuptsdk')` and none worked. Set:
 
 ```bash
-export ZUPTSDK_LIBRARY=/path/to/libvuptsdk.so.2.0.0
+export ZUPTSDK_LIBRARY=/path/to/libvuptsdk.so.2
 ```
 
 Or call `make install` to put it in `/usr/local/lib`, then `sudo ldconfig`.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # BLOCKING conformance gate for ML-KEM-768 (FIPS 203).
 # The 0/60-ACVP defect class cannot recur once this job is red-on-fail.
 # Acceptance: ACVP 80/80 (keyGen+encaps+decaps+encap/decap KeyCheck) AND both
