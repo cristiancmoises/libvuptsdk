@@ -330,7 +330,7 @@ Moisés's own work (sole author of the LZ + tANS codec), so this is
 also a sole-author relicensing.
 
 After these changes, every file in the repository carries an explicit
-`SPDX-License-Identifier: AGPL-3.0-or-later` header. The new
+`SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial` header. The new
 `make audit-licenses` target verifies this on every build/CI run.
 
 ### Hard verification audit (10 phases, all green)

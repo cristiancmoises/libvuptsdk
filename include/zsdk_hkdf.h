@@ -1,6 +1,6 @@
 /*
  * HKDF-SHA3-256 (RFC 5869, with SHA3-256 as the hash)
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  *
  * SHA3-256 is preferred over SHA-256 here because Keccak's sponge
  * construction has stronger structural properties (no length-extension,

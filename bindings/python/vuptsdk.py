@@ -2,7 +2,7 @@
 vuptsdk — Python bindings for libvuptsdk
 
 Copyright (c) 2026 Cristian Cezar Moisés
-SPDX-License-Identifier: AGPL-3.0-or-later
+SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
 
 Pure-ctypes bindings for the libvuptsdk easy_* convenience API.
 No external Python dependencies (ctypes is in the stdlib).

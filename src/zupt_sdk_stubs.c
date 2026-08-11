@@ -14,7 +14,7 @@
  * Downstream users who need the SDK PQ mode should link against the
  * canonical libvuptsdk.so (the prebuilt one) rather than libvuptsdk-base.so.
  *
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  */
 #include "zupt.h"
 #include <stdio.h>

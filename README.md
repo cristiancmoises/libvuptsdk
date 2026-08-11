@@ -545,11 +545,18 @@ See [`SECURITY.md`](SECURITY.md) for the full threat model, cryptographic constr
 
 # License
 
-This project is licensed under the **GNU Affero General Public License version 3 or later** (AGPL-3.0-or-later). See [`LICENSE`](LICENSE).
+First-party libvuptsdk source is available under the **GNU Affero General
+Public License version 3 or later** or a separate signed commercial agreement.
+See [`LICENSE`](LICENSE), [`LICENSE-AGPL-3.0`](LICENSE-AGPL-3.0), `NOTICE`, and
+`LICENSE-COMMERCIAL`. The commercial notice is not itself a license grant and
+does not relicense dependencies, generated vectors, or prebuilt artifacts.
 
-Every source file carries `SPDX-License-Identifier: AGPL-3.0-or-later`. The `make audit-licenses` target enforces this on every CI run.
+First-party source files carry
+`SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial OR LicenseRef-libvuptsdk-Commercial`.
+The `make audit-licenses` target enforces this on every CI run.
 
-For commercial licensing inquiries: `zupt@riseup.net`.
+Commercial-option rights require a separate written agreement signed by the
+applicable copyright holder and licensee. Inquiries: `sac@securityops.co`.
 
 ---
 
@@ -581,4 +588,5 @@ policy and provenance.
 
 ---
 
-**libvuptsdk 2.0.3** · Author: Cristian Cezar Moisés · License: AGPL-3.0-or-later
+**libvuptsdk 2.0.3** · Author: Cristian Cezar Moisés · License:
+AGPL-3.0-or-later or separate signed commercial agreement

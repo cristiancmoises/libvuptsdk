@@ -2,7 +2,7 @@
  * VaptVupt Codec — Next-generation lossless compression
  * Public API and data structures
  *
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  * Copyright 2026 Cristian.
  * Zero dependencies. Pure C11.
  */

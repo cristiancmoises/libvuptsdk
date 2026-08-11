@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  * Copyright (c) 2026 Cristian Cezar Moisés
  *
  * Zupt v2.0.0 — Adaptive Compression: File Type Detection

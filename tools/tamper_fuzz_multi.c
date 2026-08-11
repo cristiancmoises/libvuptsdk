@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial */
 #define _DEFAULT_SOURCE 1
 #include <zuptsdk.h>
 #include <zuptsdk_easy.h>

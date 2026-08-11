@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial */
 /* Key isolation test: verify that the SECRET portion of the private key
  * never appears in any ciphertext.
  *

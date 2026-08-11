@@ -1,6 +1,6 @@
 /*
  * libvuptsdk example: compress a file with a password, then extract it.
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  *
  * Build: gcc example.c $(pkg-config --cflags --libs vuptsdk) -o example
  *        # or, before installation:

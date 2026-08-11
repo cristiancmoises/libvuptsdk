@@ -1,6 +1,6 @@
 /*
  * vuptsdk easy.h — high-level API for drop-in encryption.
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  *
  * Goal: 3 lines of code to encrypt/decrypt anything in any language.
  * No context management, no parameter tuning, secure defaults.

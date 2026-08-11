@@ -1,7 +1,7 @@
 /*
  * Argon2id (RFC 9106)
  * Copyright (c) 2026 Cristian Cezar Moisés
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  *
  * Memory-hard password hashing function. Reference implementation
  * (single-lane focus), verified against RFC 9106 §5 test vectors.

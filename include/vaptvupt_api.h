@@ -1,6 +1,6 @@
 /*
  * VaptVupt — Zupt Integration API
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  * Copyright 2026 Cristian.
  *
  * ZUPT-COMPAT: This is the API that Zupt calls. It wraps the internal

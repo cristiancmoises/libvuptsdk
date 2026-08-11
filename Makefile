@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
 # Copyright (c) 2026 Cristian Cezar Moisés
 #
 # ─────────────────────────────────────────────────────────────────────
@@ -235,7 +235,7 @@ uninstall:
 	rm -f $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk.pc
 
 # ── License audit ───────────────────────────────────────────────────
-# Verifies every source file carries SPDX-License-Identifier: AGPL-3.0-or-later.
+# Verifies every source file carries SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial.
 # Useful as a pre-commit hook.
 # ── Formal audit (full battery) ─────────────────────────────────────
 # Runs every verification phase in this audit:
@@ -279,13 +279,13 @@ audit-licenses:
 	             -o -name '*.map' \) \
 	             -not -path './build/*' -not -path './dist/*' \
 	             -not -path './prebuilt/*' -not -path './.git/*'); do \
-	    if ! grep -q "SPDX-License-Identifier: AGPL-3.0-or-later" "$$f"; then \
+	    if ! grep -q "SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial" "$$f"; then \
 	        echo "  ✗ $$f (missing or wrong SPDX)"; \
 	        MISSING=$$((MISSING+1)); \
 	    fi; \
 	done; \
 	if [ $$MISSING -eq 0 ]; then \
-	    echo "  ✓ All source files carry SPDX-License-Identifier: AGPL-3.0-or-later"; \
+	    echo "  ✓ All source files carry SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial"; \
 	else \
 	    echo ""; \
 	    echo "  $$MISSING files need a SPDX license header. Aborting."; \

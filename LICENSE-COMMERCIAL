@@ -1,0 +1,21 @@
+LIBVUPTSDK COMMERCIAL LICENSING NOTICE
+
+libvuptsdk first-party source identified by
+
+  AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+
+is available under the public GNU Affero General Public License option or a
+separate written commercial agreement executed by the applicable copyright
+holder and licensee.
+
+THIS FILE IS NOT A COMMERCIAL LICENSE GRANT. It provides no permission outside
+the AGPL. A commercial option takes effect only through an executed agreement
+covering the exact version and intended use. This notice promises no support,
+warranty, patent, indemnification, trademark, pricing, proprietary
+redistribution, or sublicensing term.
+
+The option covers only rights owned or controlled by its licensor. It does not
+relicense dependencies, generated conformance vectors, prebuilt artifacts,
+vendored or copied code, or separately noticed material.
+
+Commercial licensing inquiries: sac@securityops.co

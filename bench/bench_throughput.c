@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial */
 /* Throughput + latency benchmarks for libvuptsdk easy_* API.
  * Reports MB/s (wall-clock) and median/p99 latency in microseconds. */
 #define _DEFAULT_SOURCE 1

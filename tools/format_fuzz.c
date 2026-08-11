@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial */
 /* Format fuzzer: feed completely malformed inputs to decrypt and assert
  * the library never crashes/leaks/hangs. Tests the parser robustness
  * against random byte strings.

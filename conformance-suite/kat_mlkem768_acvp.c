@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  * ML-KEM-768 ACVP Known-Answer-Test driver for libvuptsdk (FIPS 203).
  *
  * Overrides the library's zupt_random_bytes with a seed-injecting stub so

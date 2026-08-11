@@ -140,7 +140,7 @@ criterion: every run exits 0 with no ASAN warning.
 ### Test 5 — License coverage audit
 
 **Hypothesis**: every source file in the repository carries an explicit
-`SPDX-License-Identifier: AGPL-3.0-or-later` header.
+`SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial` header.
 
 **Method**: `make audit-licenses` walks every `.c`, `.h`, `.hpp`, `.py`,
 `.sh`, `.yml`, `.jazz`, `.s`, `Makefile`, and `.map` file (excluding
