@@ -1,6 +1,6 @@
 /*
  * AES-256-SIV (RFC 5297) via OpenSSL EVP
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  *
  * Provides nonce-misuse-resistant AEAD via SIV mode (S2V + CTR).
  * Uses OpenSSL's audited implementation. Note: SIV uses a 64-byte key

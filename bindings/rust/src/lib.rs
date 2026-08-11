@@ -1,7 +1,7 @@
 //! # vuptsdk — Rust bindings for libvuptsdk
 //!
 //! Copyright (c) 2026 Cristian Cezar Moisés
-//! SPDX-License-Identifier: AGPL-3.0-or-later
+//! SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
 //!
 //! Post-quantum hybrid cryptography (ML-KEM-768 + X25519) with safe Rust API.
 //!

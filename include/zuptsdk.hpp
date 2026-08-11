@@ -1,5 +1,5 @@
 // libvuptsdk C++17 header — RAII wrappers, exception-based error handling
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
 #ifndef ZUPTSDK_HPP
 #define ZUPTSDK_HPP
 

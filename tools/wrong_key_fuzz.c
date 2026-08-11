@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial */
 /* Wrong-key fuzz: encrypt N times to N different recipients, decrypt with
    each pair (key_i, blob_j) — all i != j must reject. */
 #define _DEFAULT_SOURCE 1

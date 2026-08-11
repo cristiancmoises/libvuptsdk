@@ -1,7 +1,7 @@
 /*
  * libvuptsdk smoke test
  * Copyright (c) 2026 Cristian Cezar Moisés
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  *
  * Exercises the documented public API (only functions declared in
  * <zuptsdk.h> and <zuptsdk_easy.h>). Returns 0 on success, 1 on any failure.

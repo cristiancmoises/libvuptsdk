@@ -1,7 +1,7 @@
 /*
  * Zupt — Backup-oriented compression with AES-256 encryption
  * Copyright (c) 2026 Cristian Cezar Moisés
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  */
 #ifndef ZUPT_H
 #define ZUPT_H

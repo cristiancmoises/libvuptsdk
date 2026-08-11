@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial */
 /* Timing variance test for decrypt failure paths.
  *
  * Hypothesis: decrypt failure timing should be approximately constant,

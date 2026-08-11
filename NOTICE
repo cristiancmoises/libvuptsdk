@@ -1,0 +1,20 @@
+libvuptsdk licensing notice
+===========================
+
+Copyright in first-party code remains with the copyright holders identified by
+file notices and repository history.
+
+First-party files bearing
+
+  AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+
+are available under the complete AGPL public option in LICENSE and
+LICENSE-AGPL-3.0, or under a separate commercial agreement signed by the
+applicable copyright holder and licensee. LICENSE-COMMERCIAL is not itself a
+commercial license grant.
+
+Dependencies, generated conformance data, prebuilt artifacts, contributed
+code, and separately noticed material retain their own licenses. Per-file
+notices control where they differ.
+
+Commercial licensing contact: sac@securityops.co

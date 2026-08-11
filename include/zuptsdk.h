@@ -2,7 +2,7 @@
  * libvuptsdk — Public C ABI for the VaptVupt backup compression library
  *
  * Copyright (c) 2026 Cristian Cezar Moisés
- * SPDX-License-Identifier: AGPL-3.0-or-later
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
  *
  * Repository:     https://git.securityops.co/cristiancmoises/libvuptsdk
  * Parent project: https://git.securityops.co/cristiancmoises/vaptvupt
