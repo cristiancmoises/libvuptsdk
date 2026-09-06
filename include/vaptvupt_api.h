@@ -1,13 +1,14 @@
 /*
- * VaptVupt — Zupt Integration API
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * VaptVupt — libvuptsdk Integration API
+ * SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright 2026 Cristian.
  *
- * ZUPT-COMPAT: This is the API that Zupt calls. It wraps the internal
- * VaptVupt API with sensible defaults for backup workloads:
- *   - Checksum always enabled (data integrity is critical for backups)
+ * SDK-COMPAT: This internal API wraps VaptVupt for SDK archive blocks:
+ *   - The nested checksum is disabled because the SDK stores a block checksum
+ *     and authenticates encrypted payloads before decompression
  *   - Adaptive window selection (auto-detect optimal wlog per file)
  *   - Level maps to mode: 1=fast, 5=balanced, 9=extreme
+ *   - Format-v2 tag blocks stay disabled for the established wire contract
  *
  * Usage:
  *   size_t bound = vvz_compress_bound(src_len);

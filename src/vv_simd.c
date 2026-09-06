@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * VaptVupt — SIMD-accelerated copy routines
  *
@@ -53,8 +53,27 @@ static void copy_match_scalar(uint8_t *dst, uint32_t offset, size_t length) {
          * writes it to dst[7], corrupting position 7.
          *
          * Safe implementation: byte-by-byte, where each write feeds the
-         * next read correctly (the classic LZ "self-reference" pattern). */
-        for (size_t i = 0; i < length; i++) dst[i] = dst[i - (ptrdiff_t)offset];
+         * next read correctly (the classic LZ "self-reference" pattern).
+         *
+         * SPRINT 123 (v2.48.5): rewritten to avoid UB-risky pointer
+         * arithmetic. Original form `dst[i - (ptrdiff_t)offset]` expands
+         * to `*(dst + (i - offset))` which forms an intermediate pointer
+         * `dst + negative_value` for `i < offset` (always true on the
+         * first iteration). Even though the caller validates
+         * `offset <= (op - dst_base)` so the resulting address stays in
+         * the same allocation, UBSan's pointer-bounds check fires on the
+         * intermediate value computation. Hoist `dst - offset` into a
+         * named pointer ONCE outside the loop where it lands in valid
+         * memory (caller already validated), then index forward only.
+         * Functionally identical: `match_src[i]` reads `dst[i-offset]`
+         * which is either a previously-written literal (i >= offset) or
+         * a byte just written by an earlier iteration (i < offset).
+         * Found by libpqvaptvupt/libvaptvupt fuzz harness in Sprint 21.
+         */
+        const uint8_t *match_src = dst - offset;  /* one valid subtraction */
+        for (size_t i = 0; i < length; i++) {
+            dst[i] = match_src[i];
+        }
     }
 }
 
@@ -62,8 +81,9 @@ static void copy_match_scalar(uint8_t *dst, uint32_t offset, size_t length) {
  * x86-64 AVX2 (guarded by compile-time + runtime detection)
  * ═══════════════════════════════════════════════════════════════ */
 
-#if defined(__x86_64__) || defined(_M_X64)
+#if !VV_DISABLE_SIMD && (defined(__x86_64__) || defined(_M_X64))
 
+#if VV_HAS_AVX2
 #include <cpuid.h>
 
 static int vv_has_avx2(void) {
@@ -72,7 +92,6 @@ static int vv_has_avx2(void) {
     return (ebx & (1 << 5)) != 0;  /* AVX2 bit */
 }
 
-#ifdef __AVX2__
 #include <immintrin.h>
 
 static void copy_fast_avx2(uint8_t *dst, const uint8_t *src, size_t n) {
@@ -143,7 +162,7 @@ static void copy_match_sse2(uint8_t *dst, uint32_t offset, size_t length) {
  * ARM64 NEON (compile-time detection)
  * ═══════════════════════════════════════════════════════════════ */
 
-#if defined(__aarch64__) && defined(__ARM_NEON)
+#if VV_HAS_NEON
 #include <arm_neon.h>
 
 static void copy_fast_neon(uint8_t *dst, const uint8_t *src, size_t n) {
@@ -174,6 +193,18 @@ static void copy_match_neon(uint8_t *dst, uint32_t offset, size_t length) {
  * RUNTIME DISPATCH (initialized once at first call)
  * ═══════════════════════════════════════════════════════════════ */
 
+#if VV_DISABLE_SIMD
+
+void vv_copy_fast(uint8_t *dst, const uint8_t *src, size_t n) {
+    copy_fast_scalar(dst, src, n);
+}
+
+void vv_copy_match(uint8_t *dst, uint32_t offset, size_t length) {
+    copy_match_scalar(dst, offset, length);
+}
+
+#else
+
 typedef void (*copy_fast_fn)(uint8_t *, const uint8_t *, size_t);
 typedef void (*copy_match_fn)(uint8_t *, uint32_t, size_t);
 
@@ -200,7 +231,7 @@ static void vv_init_simd(void) {
     copy_match_fn match;
 
 #if defined(__x86_64__) || defined(_M_X64)
-#ifdef __AVX2__
+#if VV_HAS_AVX2
     if (vv_has_avx2()) {
         fast  = copy_fast_avx2;
         match = copy_match_avx2;
@@ -211,7 +242,7 @@ static void vv_init_simd(void) {
         fast  = copy_fast_sse2;
         match = copy_match_sse2;
     }
-#elif defined(__aarch64__) && defined(__ARM_NEON)
+#elif VV_HAS_NEON
     fast  = copy_fast_neon;
     match = copy_match_neon;
 #else
@@ -240,3 +271,5 @@ void vv_copy_match(uint8_t *dst, uint32_t offset, size_t length) {
     }
     fn(dst, offset, length);
 }
+
+#endif /* VV_DISABLE_SIMD */

@@ -17,4 +17,11 @@ Dependencies, generated conformance data, prebuilt artifacts, contributed
 code, and separately noticed material retain their own licenses. Per-file
 notices control where they differ.
 
+The embedded VaptVupt codec files in `src/vv_*.c`, `src/vaptvupt_api.c`,
+`include/vv_*.h`, `include/vaptvupt.h`, and `include/vaptvupt_api.h` were
+synchronized from vaptvupt-codec commit
+1cc78bce90619dbf97e0ed1ad449c3c4f6329041. They retain their upstream
+GPL-3.0-or-later SPDX identifiers and are distributed under
+LICENSE-GPL-3.0. The libvuptsdk commercial option does not relicense them.
+
 Commercial licensing contact: sac@securityops.co

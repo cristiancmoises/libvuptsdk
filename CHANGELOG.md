@@ -9,19 +9,71 @@ at the ABI level (see README.md "Versioning").
 
 ## [Unreleased]
 
+### Changed
+
+- Synchronized the source-built VaptVupt core with tagged codec release
+  **v2.65.11** (`1cc78bce90619dbf97e0ed1ad449c3c4f6329041`). This brings the
+  current decoder bounds checks, entropy fixes, BCJ support, encoder workspace
+  changes, and allocation-neutral FAST context API into the base library.
+- Preserved the SDK archive contract in the `vvz_*` wrapper: the nested codec
+  checksum and format-v2 tag blocks remain disabled, the v2.46.5 decoder
+  compatibility switch remains enabled, and level mapping remains 1–2 FAST,
+  3–7 balanced, and 8–9 extreme.
+- Aligned the explicit multithreaded compression path with that same level and
+  format policy. Its old level-3 FAST cutoff and missing compatibility switch
+  could otherwise produce different frames solely because thread count
+  changed.
+
+### Tests
+
+- Added a source-static codec integration gate covering serial levels 1/5/9,
+  the two-worker compression/decompression path, exact output sizing, every
+  truncated prefix of a generated frame, invalid window and BCJ metadata,
+  nested-checksum delegation, and BCJ decode. The same gate is built with
+  AddressSanitizer and UndefinedBehaviorSanitizer by `make test-asan`.
+
+### Licensing and packaging
+
+- Kept the synchronized codec files under their upstream
+  `GPL-3.0-or-later` identifiers and added the complete GPLv3 text. The SDK's
+  AGPL/commercial-option notice does not relicense the embedded codec.
+- Updated the per-file license gate to check the SDK and codec scopes
+  separately.
+- Source distributions now include all AGPL, GPL, commercial-option, and
+  provenance notices, the conformance suite, and the Brazilian Portuguese
+  README, and exclude the frozen full-ABI prebuilt. Their filename explicitly
+  marks them as an unreleased, source-only codec integration instead of
+  reusing the already-released SDK 2.0.3 identity. Debian and RPM runtime
+  packaging is explicitly blocked until that library can be rebuilt and
+  re-audited from complete source; the recipes are already prepared to include
+  all notices once the gate is resolved.
+
 ### Documentation
 
-- **Retargeted project links after the `zupt` → `vaptvupt` rename.** All
-  references to the parent project now point at
+- **Clarified the project boundaries.** Zupt remains a separate consumer and
+  retains its name; it is not treated as another name for VaptVupt or the
+  codec. Links for the related VaptVupt application point at
   `git.securityops.co/cristiancmoises/vaptvupt`, and the embedded codec at
   `git.securityops.co/cristiancmoises/vaptvupt-codec`. SDK self-links moved to
   the canonical `git.securityops.co/cristiancmoises/libvuptsdk`
   (GitHub/Codeberg are documented mirrors; GitHub `/blob/main/` file links
   rewritten to the Gitea `/src/branch/main/` form). Added a **Repositories &
   related projects** section to `README.md`, corrected the `zuptsdk.h` header
-  banner (Repository / Parent project / Codec), and dropped now-inaccurate
+  banner (Repository / Related application / Codec), and dropped now-inaccurate
   "GitHub issues" phrasing (the canonical forge is Forgejo). The security
   contact email is unchanged.
+- Added `README.pt-BR.md` and documented the exact codec revision, SDK wrapper
+  policy, and the boundary between the source-built base library and the
+  frozen full-ABI prebuilt.
+- Restored baseline x86-64 portability by no longer compiling the entire codec
+  with AVX2 instructions by default. AVX2 remains an explicit build-time
+  opt-in through `VV_SIMD_FLAGS=-mavx2`.
+
+### Known limitation
+
+- The public tree still lacks source for some symbols in the full
+  `libvuptsdk.so` ABI. The tracked x86-64 prebuilt has therefore not been
+  regenerated with codec 2.65.11 and must not be relabeled as a new build.
 
 ---
 
@@ -470,7 +522,7 @@ libvuptsdk follows strict ABI versioning. The contract:
 
 Pre-2.0.0 versions of libvuptsdk shipped as part of the monolithic zupt
 repository (`zupt/sdk/`). Their changelog history lives in zupt's
-CHANGELOG.md prior to the v2.2.2 god-tier audit. Notable pre-split
+CHANGELOG.md prior to the v2.2.2 internal audit. Notable pre-split
 milestones:
 
 - **1.0.0** (zupt 2.1.0): first stable ABI; ML-KEM-768 + X25519 + HKDF

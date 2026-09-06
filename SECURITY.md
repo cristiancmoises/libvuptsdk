@@ -193,16 +193,17 @@ it explicitly rather than claim audits we haven't paid for.
    constant-time. For untrusted-coresidency threat models, build with the
    Jasmin backend or use the XChaCha20-Poly1305 AEAD (the default for new
    archives), which has no secret-dependent table lookups.
-8. **VaptVupt codec archive format: from-source vs prebuilt.** The embedded
-   VaptVupt codec is synced to upstream v2.48.2, whose encoder emits modern
-   Huffman literal formats (lit_fmt=3/4) that the canonical prebuilt's older
-   embedded decoder cannot read. An archive compressed with the codec by the
-   from-source library may therefore fail to extract via the prebuilt (text at
-   BALANCED/EXTREME). This is a compatibility limitation, not a confidentiality
-   issue — the codec sits **inside** the AEAD envelope, so a malformed frame
-   never reaches the decoder unless already authenticated. Self-roundtrip
-   within either library is unaffected; full interop requires regenerating the
-   prebuilt from v2.48.2 (same action as limitation 6). See CHANGELOG 2.0.2.
+8. **VaptVupt codec archive format: from-source vs prebuilt.** The source-built
+   library embeds VaptVupt 2.65.11, while the canonical full-ABI prebuilt still
+   contains an older decoder and cannot be rebuilt from this public tree. The
+   SDK wrapper deliberately disables format-v2 tag blocks and four-stream
+   Huffman output, but this does not make every modern literal representation
+   readable by the frozen decoder. Archives produced by the source and prebuilt
+   variants are therefore not claimed to be mutually interchangeable. Encrypted
+   block payloads are authenticated before decoding; unencrypted archive blocks
+   rely on the bounded decoder followed by the stored plaintext XXH64 check.
+   Full interoperation requires regenerating and re-auditing the prebuilt from
+   the complete current source. See the Unreleased section of CHANGELOG.md.
 
 ---
 
@@ -230,7 +231,7 @@ The following table reports the actual hardening properties of the
 shipped binaries, verified by `tools/checksec_lib.sh` (a checksec-style
 audit script).
 
-### Source build (`libvuptsdk-base.so.2.0.0`)
+### Source build (`libvuptsdk-base.so.2.0.3`)
 
 | Property | Status | Notes |
 |---|---|---|
@@ -243,7 +244,7 @@ audit script).
 | Symbol versioning | ✓ ZUPTSDK_1.0 | Stable ABI guarantees |
 | Dangerous symbols | ✓ none | No `gets`/`system`/`exec*` |
 
-### Canonical prebuilt (`libvuptsdk.so.2.0.0`)
+### Frozen prebuilt (`libvuptsdk.so.2.0.3`)
 
 | Property | Status | Notes |
 |---|---|---|
@@ -404,7 +405,7 @@ The parser robustly rejects all malformed input.
 | zupt 2.2 SDK fuzz round 1 | 2025 | — | 250,000 | 0 crashes |
 | zupt 2.2 SDK fuzz round 2 | 2025 | — | 500,000 | 0 crashes |
 | zupt 2.2.1 ASAN sweep | 2025 | 169 | — | 0 mem errors |
-| zupt 2.2.2 god-tier | 2025 | 169 | 1,000 | 0 crashes |
+| zupt 2.2.2 internal audit | 2025 | 169 | 1,000 | 0 crashes |
 | **libvuptsdk 2.0.0 (this audit)** | **2026** | **30 + 13 + extensions** | **+62,800** | **all green** |
 | **Cumulative** | | **212+** | **813,800** | **all green** |
 

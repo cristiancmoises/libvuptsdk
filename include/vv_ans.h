@@ -1,10 +1,10 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * VaptVupt — tANS Entropy Codec (v2: sparse header + 4-way interleaved)
  *
  * Standalone: define VV_ANS_STANDALONE to use without VaptVupt.
- * ZUPT-COMPAT: this header has zero VaptVupt dependencies when standalone.
+ * EMBED-COMPAT: this header has zero VaptVupt dependencies when standalone.
  *
  * v0.6 changes:
  *   - Adaptive sparse/dense header (Item 1): 3× smaller on typical data
@@ -28,7 +28,7 @@ extern "C" {
 #define VVA_HDR_SINGLE   0x01  /* Single symbol: 0-bit encoding */
 #define VVA_HDR_SPARSE   0x02  /* ≤32 active symbols: (sym,freq) pairs */
 #define VVA_HDR_DENSE    0x03  /* >32 active symbols: max_sym + freq array */
-/* ZUPT-COMPAT: v0.5 legacy format detected by first byte being 0x00-0xFF
+/* EMBED-COMPAT: v0.5 legacy format detected by first byte being 0x00-0xFF
  * without matching any HDR_* code — fall back to old read path. */
 #define VVA_HDR_LEGACY   0x00  /* v0.5 format: [max_sym] [2B×(max_sym+1)] */
 
@@ -75,6 +75,26 @@ vva_error_t vva_decode4(const uint8_t *src, size_t src_len,
                         uint8_t *dst, size_t dst_cap,
                         size_t num_literals, size_t *src_consumed);
 
+/* Allocation-free single/four-stream literal decode. The workspace must
+ * have the queried size/alignment, must not overlap src/dst, and must be
+ * exclusive to this call. It can be reused after any return; its contents
+ * are unspecified. NULL/misaligned workspace returns PARAM, insufficient
+ * capacity returns OVERFLOW. src_consumed is always required. Nonempty
+ * decode also requires non-NULL src/dst. num_literals == 0 succeeds without
+ * a workspace, and permits NULL src/dst with zero src_len/dst_cap.
+ * These helpers do not cover the legacy order-1 context decoder. */
+size_t vva_decode_workspace_size(void);
+size_t vva_decode_workspace_alignment(void);
+
+vva_error_t vva_decode_with_workspace(const uint8_t *src, size_t src_len,
+                                      uint8_t *dst, size_t dst_cap,
+                                      size_t num_literals, size_t *src_consumed,
+                                      void *workspace, size_t workspace_cap);
+vva_error_t vva_decode4_with_workspace(const uint8_t *src, size_t src_len,
+                                       uint8_t *dst, size_t dst_cap,
+                                       size_t num_literals, size_t *src_consumed,
+                                       void *workspace, size_t workspace_cap);
+
 /* Order-1 context model encode/decode (tag 'C', v0.7+)
  * Uses 256 ANS tables — one per previous byte. Contexts with too few
  * observations inherit from the global table. 4 MB decode memory. */
@@ -86,7 +106,7 @@ vva_error_t vva_decode_ctx(const uint8_t *src, size_t src_len,
                            size_t num_literals, size_t *src_consumed);
 
 /* ═══ Sequence coding (tag 'S', v0.8+) ═══
- * ZUPT-COMPAT: available when VV_ANS_STANDALONE is defined.
+ * EMBED-COMPAT: available when VV_ANS_STANDALONE is defined.
  *
  * Encodes an LZ token stream using 3 ANS tables: literals, match-length
  * codes (36 symbols), and offset codes (24 symbols). Replaces raw varint
@@ -133,6 +153,17 @@ vva_error_t vva_decode_sequences(const uint8_t *src, size_t src_len,
 vva_error_t vva_decode_sequences_v2(const uint8_t *src, size_t src_len,
                                      uint8_t *dst, size_t dst_cap, size_t *dst_len,
                                      const uint8_t *dst_base);
+
+/* Internal decoder entry points used by the frame decoder.  The wire header
+ * bounds offsets more tightly than the 24-bit maximum for normal windows;
+ * passing that bound lets the SEQ safe path activate without weakening its
+ * proof.  Public compatibility wrappers above retain the 24-bit limit. */
+vva_error_t vva_decode_sequences_limited(const uint8_t *src, size_t src_len,
+                                          uint8_t *dst, size_t dst_cap, size_t *dst_len,
+                                          const uint8_t *dst_base, uint32_t max_offset);
+vva_error_t vva_decode_sequences_v2_limited(const uint8_t *src, size_t src_len,
+                                             uint8_t *dst, size_t dst_cap, size_t *dst_len,
+                                             const uint8_t *dst_base, uint32_t max_offset);
 
 static inline size_t vva_bound(size_t src_len) {
     /* Context model header can be up to ~10KB, seq coding adds 3 table headers */
