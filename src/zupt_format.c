@@ -445,13 +445,14 @@ static int zupt_path_is_safe(const char *path) {
     return 1;
 }
 
-/* SECURITY: Open an output file for writing, refusing to follow symlinks.
+/* SECURITY: Open an output file for writing, refusing to follow symlinks and
+ * non-regular files.
  *
  * Defends against the case where an attacker has placed a symlink in the
  * output directory before extraction, e.g. ~/Downloads/innocent.txt → /etc/passwd.
- * On Linux/BSD/macOS we use O_NOFOLLOW + O_EXCL semantics: if the path
- * exists and is a symlink, open() returns ELOOP. If the path doesn't
- * exist, the symlink check is moot.
+ * On Linux/BSD/macOS O_NOFOLLOW rejects a final-component symlink. O_NONBLOCK
+ * keeps a pre-existing FIFO from hanging extraction; fstat() then rejects
+ * FIFOs, devices, sockets and directories before any payload is written.
  *
  * Windows behavior: defaults to fopen "wb" (does not follow reparse points
  * unless explicitly enabled). The most common Windows attack vector here
@@ -464,10 +465,24 @@ static FILE *zupt_safe_fopen_output(const char *path) {
     /* No portable O_NOFOLLOW on Windows; rely on directory permissions. */
     return fopen(path, "wb");
 #else
-    /* Open with O_NOFOLLOW so that if the leaf is a symlink, open fails.
-     * O_TRUNC zeros existing file (matches "wb" semantics). */
-    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0600);
+    int flags = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+#ifdef O_NONBLOCK
+    flags |= O_NONBLOCK;
+#endif
+    int fd = open(path, flags, 0600);
     if (fd < 0) return NULL;
+    struct stat st;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        close(fd);
+        errno = EINVAL;
+        return NULL;
+    }
     FILE *f = fdopen(fd, "wb");
     if (!f) { close(fd); return NULL; }
     return f;
@@ -525,7 +540,7 @@ zupt_error_t zupt_compress_files(const char *output_path,
     if (opts->codec_id == ZUPT_CODEC_AUTO)
         opts->codec_id = zupt_resolve_auto_codec();
 
-    FILE *out = fopen(output_path, "wb");
+    FILE *out = zupt_safe_fopen_output(output_path);
     if (!out) { fprintf(stderr, "Error: Cannot create '%s': %s\n", output_path, strerror(errno)); return ZUPT_ERR_IO; }
 
     int write_err = 0; /* Accumulate write errors */
@@ -1000,7 +1015,7 @@ zupt_error_t zupt_compress_solid(const char *output_path,
     if (opts->codec_id == ZUPT_CODEC_AUTO)
         opts->codec_id = zupt_resolve_auto_codec();
 
-    FILE *out = fopen(output_path, "wb");
+    FILE *out = zupt_safe_fopen_output(output_path);
     if (!out) { fprintf(stderr, "Error: Cannot create '%s'\n", output_path); return ZUPT_ERR_IO; }
 
     int write_err = 0;
@@ -1463,7 +1478,8 @@ zupt_error_t read_enc_header(FILE *f, zupt_archive_header_t *hdr, zupt_options_t
         memcpy(nonce, eb.payload + 33, 16);
         memcpy(&iter, eb.payload + 49, 4);
         free(eb.payload);
-        fprintf(stderr, "  Deriving decryption key (PBKDF2-SHA256, %u iterations)...\n", iter);
+        if (!opts->quiet)
+            fprintf(stderr, "  Deriving decryption key (PBKDF2-SHA256, %u iterations)...\n", iter);
         zupt_derive_keys(&opts->keyring, opts->password, salt, nonce, iter);
         return ZUPT_OK;
     } else {
@@ -1479,7 +1495,8 @@ zupt_error_t read_enc_header(FILE *f, zupt_archive_header_t *hdr, zupt_options_t
         memcpy(nonce, eb.payload + 32, 16);
         memcpy(&iter, eb.payload + 48, 4);
         free(eb.payload);
-        fprintf(stderr, "  Deriving decryption key (PBKDF2-SHA256, %u iterations)...\n", iter);
+        if (!opts->quiet)
+            fprintf(stderr, "  Deriving decryption key (PBKDF2-SHA256, %u iterations)...\n", iter);
         zupt_derive_keys(&opts->keyring, opts->password, salt, nonce, iter);
         return ZUPT_OK;
     }
@@ -1608,6 +1625,13 @@ zupt_error_t zupt_list_archive(const char *arc, zupt_options_t *opts) {
  * EXTRACT
  * ═══════════════════════════════════════════════════════════════════ */
 
+static int output_fits_limit(const zupt_options_t *opts, uint64_t produced,
+                             size_t additional) {
+    if (!opts->max_output_size) return 1;
+    if (produced > opts->max_output_size) return 0;
+    return additional <= opts->max_output_size - produced;
+}
+
 zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options_t *opts) {
     FILE *f = fopen(arc, "rb");
     if (!f) { fprintf(stderr, "Error: Cannot open '%s'\n", arc); return ZUPT_ERR_IO; }
@@ -1617,8 +1641,24 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
     zupt_error_t err = open_archive(f, opts, &hdr, &ft, &ents, &n);
     if (err != ZUPT_OK) { fclose(f); fprintf(stderr, "Error: %s\n", zupt_strerror(err)); return err; }
 
+    /* Refuse an archive whose declared output exceeds the caller's budget
+     * before creating any output files. Keep checking actual decoded bytes
+     * below as well: a hostile archive need not make its index agree with its
+     * block headers. */
+    uint64_t declared_output = 0;
+    for (int i = 0; i < n; i++) {
+        if (ents[i].uncompressed_size > UINT64_MAX - declared_output) {
+            free(ents); fclose(f); return ZUPT_ERR_OVERFLOW;
+        }
+        declared_output += ents[i].uncompressed_size;
+    }
+    if (opts->max_output_size && declared_output > opts->max_output_size) {
+        free(ents); fclose(f); return ZUPT_ERR_OVERFLOW;
+    }
+
     if (dir) zupt_mkdir(dir);
     int ok=0, fail=0;
+    int limit_exceeded = 0;
     uint64_t total_extracted = 0;
     time_t start = time(NULL);
 
@@ -1665,7 +1705,11 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
             zupt_block_t blk;
             err = read_block(f, &blk);
             if (err != ZUPT_OK) { dec_error = 1; break; }
-            if (blk.block_type == ZUPT_BLOCK_INDEX) { free(blk.payload); break; }
+            if (blk.block_type == ZUPT_BLOCK_INDEX) {
+                free(blk.payload);
+                dec_error = 1;
+                break;
+            }
 
             uint8_t *dec; size_t dlen;
             /* Solid mode uses synthetic fi=0 (AAD = (1<<32) | block_seq) */
@@ -1678,14 +1722,18 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
                 dec_error = 1; break;
             }
 
-            if (solid_pos + dlen > (size_t)total_size) dlen = (size_t)total_size - solid_pos;
+            if (dlen > (size_t)total_size - solid_pos) {
+                free(dec);
+                dec_error = 1;
+                break;
+            }
             memcpy(solid_buf + solid_pos, dec, dlen);
             solid_pos += dlen;
             free(dec);
             block_seq++;
         }
 
-        if (dec_error) {
+        if (dec_error || solid_pos != (size_t)total_size) {
             free(solid_buf); free(ents); fclose(f);
             return ZUPT_ERR_CORRUPT;
         }
@@ -1705,13 +1753,15 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
 
             FILE *of = zupt_safe_fopen_output(out_path);
             if (!of) { fail++; continue; }
+            int entry_ok = 0;
 
             uint64_t off = e->first_block_offset;
             uint64_t sz = e->uncompressed_size;
-            if (off + sz <= total_size) {
+            if (off <= total_size && sz <= total_size - off) {
                 if (fwrite(solid_buf + off, 1, (size_t)sz, of) != (size_t)sz) {
                     fprintf(stderr, "Error: write failed (disk full?) for %s\n", e->path);
                     fclose(of);
+                    unlink(out_path);
                     free(solid_buf);
                     return ZUPT_ERR_IO;
                 }
@@ -1720,10 +1770,10 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
                 /* Verify content hash (empty files have content_hash=0) */
                 if (sz > 0) {
                     uint64_t ck = zupt_xxh64(solid_buf + off, (size_t)sz, 0);
-                    if (ck == e->content_hash) ok++;
+                    if (ck == e->content_hash) { ok++; entry_ok = 1; }
                     else { fprintf(stderr, "  Checksum fail: %s\n", e->path); fail++; }
                 } else {
-                    ok++; /* Empty file: nothing to verify */
+                    ok++; entry_ok = 1; /* Empty file: nothing to verify */
                 }
             } else {
                 fprintf(stderr, "  Invalid offset: %s\n", e->path); fail++;
@@ -1734,6 +1784,7 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
                 fprintf(stderr, "  %s (%s)\n", e->path, sz_s);
             }
             fclose(of);
+            if (!entry_ok) unlink(out_path);
         }
 
         free(solid_buf);
@@ -1801,8 +1852,14 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
                                 zpar_slot_t *s = zpar_wait_slot(pctx, pending_slots[pi]);
                                 if (!s || s->error != ZUPT_OK) { berr = 1; }
                                 else if (s->output && s->output_len > 0) {
-                                    if (fwrite(s->output, 1, s->output_len, of) != s->output_len) berr = 1;
-                                    total_extracted += s->output_len;
+                                    if (!output_fits_limit(opts, total_extracted,
+                                                           s->output_len)) {
+                                        limit_exceeded = 1;
+                                        berr = 1;
+                                    } else {
+                                        if (fwrite(s->output, 1, s->output_len, of) != s->output_len) berr = 1;
+                                        total_extracted += s->output_len;
+                                    }
                                 }
                                 zpar_release_slot(pctx, pending_slots[pi]);
                             }
@@ -1832,8 +1889,14 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
                             err = decompress_block(&ref_blk, &opts->keyring, 0, &rdec, &rdlen);
                             free(ref_blk.payload);
                             if (err != ZUPT_OK) { berr = 1; break; }
-                            if (fwrite(rdec, 1, rdlen, of) != rdlen) berr = 1;
-                            total_extracted += rdlen;
+                            if (!output_fits_limit(opts, total_extracted,
+                                                   rdlen)) {
+                                limit_exceeded = 1;
+                                berr = 1;
+                            } else {
+                                if (fwrite(rdec, 1, rdlen, of) != rdlen) berr = 1;
+                                total_extracted += rdlen;
+                            }
                             free(rdec);
                             blocks_remaining--;
                             decomp_seq++;
@@ -1870,8 +1933,14 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
                             continue;
                         }
                         if (s->output && s->output_len > 0) {
-                            if (fwrite(s->output, 1, s->output_len, of) != s->output_len) berr = 1;
-                            total_extracted += s->output_len;
+                            if (!output_fits_limit(opts, total_extracted,
+                                                   s->output_len)) {
+                                limit_exceeded = 1;
+                                berr = 1;
+                            } else {
+                                if (fwrite(s->output, 1, s->output_len, of) != s->output_len) berr = 1;
+                                total_extracted += s->output_len;
+                            }
                         }
                         zpar_release_slot(pctx, pending_slots[pi]);
                     }
@@ -1904,8 +1973,13 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
                         err = decompress_block(&ref_blk, &opts->keyring, 0, &dec, &dlen);
                         free(ref_blk.payload);
                         if (err != ZUPT_OK) { berr=1; break; }
-                        if (fwrite(dec, 1, dlen, of) != dlen) berr = 1;
-                        total_extracted += dlen;
+                        if (!output_fits_limit(opts, total_extracted, dlen)) {
+                            limit_exceeded = 1;
+                            berr = 1;
+                        } else {
+                            if (fwrite(dec, 1, dlen, of) != dlen) berr = 1;
+                            total_extracted += dlen;
+                        }
                         free(dec);
                         continue;
                     }
@@ -1923,8 +1997,13 @@ zupt_error_t zupt_extract_archive(const char *arc, const char *dir, zupt_options
                     err = decompress_block(&blk, &opts->keyring, aad_seq, &dec, &dlen);
                     free(blk.payload);
                     if (err != ZUPT_OK) { berr=1; break; }
-                    if (fwrite(dec, 1, dlen, of) != dlen) berr = 1;
-                    total_extracted += dlen;
+                    if (!output_fits_limit(opts, total_extracted, dlen)) {
+                        limit_exceeded = 1;
+                        berr = 1;
+                    } else {
+                        if (fwrite(dec, 1, dlen, of) != dlen) berr = 1;
+                        total_extracted += dlen;
+                    }
                     free(dec);
                 }
             }
@@ -1938,6 +2017,7 @@ file_done:
             } else {
                 ok++;
             }
+            if (limit_exceeded) break;
         }
 
         if (pctx) zpar_destroy(pctx);
@@ -1947,11 +2027,14 @@ file_done:
     if (elapsed < 1) elapsed = 1;
     char sz[16]; zupt_format_size(total_extracted, sz, sizeof(sz));
     double speed = (double)total_extracted / (double)elapsed / 1048576.0;
-    fprintf(stderr, "\n  Extracted %d file(s), %s (%.1f MB/s)", ok, sz, speed);
-    if (fail > 0) fprintf(stderr, ", %d error(s)", fail);
-    fprintf(stderr, "\n");
+    if (!opts->quiet) {
+        fprintf(stderr, "\n  Extracted %d file(s), %s (%.1f MB/s)", ok, sz, speed);
+        if (fail > 0) fprintf(stderr, ", %d error(s)", fail);
+        fprintf(stderr, "\n");
+    }
 
     free(ents); fclose(f);
+    if (limit_exceeded) return ZUPT_ERR_OVERFLOW;
     return fail>0 ? ZUPT_ERR_CORRUPT : ZUPT_OK;
 }
 
@@ -2076,7 +2159,8 @@ zupt_error_t zupt_test_archive(const char *arc, zupt_options_t *opts) {
         }
     }
 
-    printf("\n  Test: %d passed, %d failed (%d files)\n", pass, fail, n);
+    if (!opts->quiet)
+        printf("\n  Test: %d passed, %d failed (%d files)\n", pass, fail, n);
     free(ents); fclose(f);
     return fail>0 ? ZUPT_ERR_BAD_CHECKSUM : ZUPT_OK;
 }

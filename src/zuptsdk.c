@@ -14,6 +14,7 @@
 #include "zupt_x25519.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +38,8 @@
  * ════════════════════════════════════════════════════════════════════════ */
 
 static zuptsdk_allocator_t g_alloc = { NULL, NULL, NULL, NULL };
+
+#define ZSDK_DEFAULT_MAX_DECOMPRESSED (16ull * 1024 * 1024 * 1024)
 
 static void *zsdk_malloc(size_t n) {
     if (g_alloc.malloc_fn) return g_alloc.malloc_fn(g_alloc.userdata, n);
@@ -73,8 +76,55 @@ static FILE *zsdk_fopen_private(const char *path) {
 #ifdef _WIN32
     return fopen(path, "wb");
 #else
-    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    int flags = O_WRONLY | O_CREAT | O_EXCL;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    int fd = open(path, flags, 0600);
     if (fd < 0) return NULL;
+    FILE *f = fdopen(fd, "wb");
+    if (!f) close(fd);
+    return f;
+#endif
+}
+
+/* Open a caller-selected output path without following a final symlink and
+ * establish its requested mode before any bytes are written. Existing regular
+ * files are truncated for API compatibility. */
+static FILE *zsdk_fopen_output(const char *path, mode_t mode) {
+#ifdef _WIN32
+    (void)mode;
+    return fopen(path, "wb");
+#else
+    int flags = O_WRONLY | O_CREAT;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+#ifdef O_NONBLOCK
+    flags |= O_NONBLOCK;
+#endif
+    int fd = open(path, flags, mode);
+    if (fd < 0) return NULL;
+    struct stat st;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        close(fd);
+        errno = EINVAL;
+        return NULL;
+    }
+    if (fchmod(fd, mode) != 0) {
+        close(fd);
+        return NULL;
+    }
+    if (ftruncate(fd, 0) != 0) {
+        close(fd);
+        return NULL;
+    }
     FILE *f = fdopen(fd, "wb");
     if (!f) close(fd);
     return f;
@@ -254,14 +304,17 @@ struct zuptsdk_ctx {
     zuptsdk_log_fn       log_fn;
     zuptsdk_log_level_t  log_level;
     void                *log_ud;
+    uint64_t             max_decompressed;
 };
 
 int zuptsdk_ctx_create(zuptsdk_ctx_t **ctx_out) {
     if (!ctx_out) return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "ctx_out is NULL");
+    *ctx_out = NULL;
     zuptsdk_ctx_t *c = (zuptsdk_ctx_t *)zsdk_calloc(1, sizeof(*c));
     if (!c) return ZSDK_FAIL(ZUPTSDK_ERR_NO_MEMORY, "ctx_create");
     c->threads = 0; /* auto */
     c->log_level = ZUPTSDK_LOG_ERROR;
+    c->max_decompressed = ZSDK_DEFAULT_MAX_DECOMPRESSED;
     *ctx_out = c;
     return ZUPTSDK_OK;
 }
@@ -277,6 +330,12 @@ int zuptsdk_ctx_set_threads(zuptsdk_ctx_t *ctx, int threads) {
     if (threads < 0 || threads > 256)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "threads must be 0..256");
     ctx->threads = threads;
+    return ZUPTSDK_OK;
+}
+
+int zuptsdk_ctx_set_max_decompressed(zuptsdk_ctx_t *ctx, uint64_t max_bytes) {
+    if (!ctx) return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "ctx is NULL");
+    ctx->max_decompressed = max_bytes;
     return ZUPTSDK_OK;
 }
 
@@ -312,11 +371,12 @@ struct zuptsdk_options {
 
 int zuptsdk_options_create(zuptsdk_options_t **opts_out) {
     if (!opts_out) return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "opts_out is NULL");
+    *opts_out = NULL;
     zuptsdk_options_t *o = (zuptsdk_options_t *)zsdk_calloc(1, sizeof(*o));
     if (!o) return ZSDK_FAIL(ZUPTSDK_ERR_NO_MEMORY, "options_create");
     o->codec = ZUPTSDK_CODEC_AUTO;
     o->level = 7;
-    o->max_decompressed = 16ull * 1024 * 1024 * 1024; /* 16 GiB default */
+    o->max_decompressed = ZSDK_DEFAULT_MAX_DECOMPRESSED;
     *opts_out = o;
     return ZUPTSDK_OK;
 }
@@ -382,6 +442,7 @@ struct zuptsdk_secure_buf {
 
 int zuptsdk_secure_buf_create(size_t size, zuptsdk_secure_buf_t **buf_out) {
     if (!buf_out)             return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "buf_out is NULL");
+    *buf_out = NULL;
     if (size < 1 || size > 65536)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "size must be 1..65536");
 
@@ -413,7 +474,11 @@ void zuptsdk_secure_buf_destroy(zuptsdk_secure_buf_t *buf) {
 
 int zuptsdk_secure_buf_get(zuptsdk_secure_buf_t *buf,
                            uint8_t **data_out, size_t *size_out) {
-    if (!buf || !data_out || !size_out)
+    if (!data_out || !size_out)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
+    *data_out = NULL;
+    *size_out = 0;
+    if (!buf)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
     *data_out = buf->data;
     *size_out = buf->size;
@@ -422,7 +487,10 @@ int zuptsdk_secure_buf_get(zuptsdk_secure_buf_t *buf,
 
 int zuptsdk_secure_buf_from_data(const uint8_t *data, size_t size,
                                  zuptsdk_secure_buf_t **buf_out) {
-    if (!data || !buf_out)
+    if (!buf_out)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
+    *buf_out = NULL;
+    if (!data)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
     int rc = zuptsdk_secure_buf_create(size, buf_out);
     if (rc != ZUPTSDK_OK) return rc;
@@ -450,6 +518,9 @@ static void zsdk_apply_options(zupt_options_t *zopts,
                                const zuptsdk_options_t *sdk_opts,
                                const zuptsdk_ctx_t *ctx) {
     zupt_default_options(zopts);
+    zopts->quiet = 1;
+    zopts->max_output_size = ctx ? ctx->max_decompressed
+                                  : ZSDK_DEFAULT_MAX_DECOMPRESSED;
     if (sdk_opts) {
         zopts->codec_id   = zsdk_codec_map(sdk_opts->codec);
         zopts->level      = sdk_opts->level;
@@ -535,6 +606,7 @@ static int zsdk_tmp_path(char *out, size_t cap, const char *prefix) {
 int zuptsdk_keypair_generate(zuptsdk_ctx_t *ctx, zuptsdk_keypair_t **kp_out) {
     (void)ctx;
     if (!kp_out) return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "kp_out is NULL");
+    *kp_out = NULL;
 
     zuptsdk_keypair_t *kp = (zuptsdk_keypair_t *)zsdk_calloc(1, sizeof(*kp));
     if (!kp) return ZSDK_FAIL(ZUPTSDK_ERR_NO_MEMORY, "keypair alloc");
@@ -572,20 +644,22 @@ void zuptsdk_keypair_destroy(zuptsdk_keypair_t *kp) {
 static int zsdk_copy_file(const char *src, const char *dst, mode_t mode) {
     FILE *fi = fopen(src, "rb");
     if (!fi) return ZSDK_FAIL(ZUPTSDK_ERR_IO, "open %s", src);
-    FILE *fo = fopen(dst, "wb");
+    FILE *fo = zsdk_fopen_output(dst, mode);
     if (!fo) { fclose(fi); return ZSDK_FAIL(ZUPTSDK_ERR_IO, "create %s", dst); }
     uint8_t buf[4096];
     size_t n;
     int rc = ZUPTSDK_OK;
     while ((n = fread(buf, 1, sizeof(buf), fi)) > 0)
         if (fwrite(buf, 1, n, fo) != n) { rc = ZSDK_FAIL(ZUPTSDK_ERR_IO, "write %s", dst); break; }
+    if (rc == ZUPTSDK_OK && ferror(fi))
+        rc = ZSDK_FAIL(ZUPTSDK_ERR_IO, "read %s", src);
+    if (rc == ZUPTSDK_OK && fflush(fo) != 0)
+        rc = ZSDK_FAIL(ZUPTSDK_ERR_IO, "flush %s", dst);
     zuptsdk_secure_zero(buf, sizeof(buf));
-    fclose(fi); fclose(fo);
-#ifndef _WIN32
-    if (rc == ZUPTSDK_OK) chmod(dst, mode);
-#else
-    (void)mode;
-#endif
+    if (fclose(fi) != 0 && rc == ZUPTSDK_OK)
+        rc = ZSDK_FAIL(ZUPTSDK_ERR_IO, "close %s", src);
+    if (fclose(fo) != 0 && rc == ZUPTSDK_OK)
+        rc = ZSDK_FAIL(ZUPTSDK_ERR_IO, "close %s", dst);
     return rc;
 }
 
@@ -602,7 +676,10 @@ int zuptsdk_keypair_save_public(const zuptsdk_keypair_t *kp, const char *path) {
 }
 
 int zuptsdk_privkey_load(const char *path, zuptsdk_privkey_t **key_out) {
-    if (!path || !key_out)
+    if (!key_out)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
+    *key_out = NULL;
+    if (!path)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
     FILE *f = fopen(path, "rb");
     if (!f) return ZSDK_FAIL(ZUPTSDK_ERR_IO, "open private key %s", path);
@@ -622,7 +699,10 @@ void zuptsdk_privkey_destroy(zuptsdk_privkey_t *key) {
 }
 
 int zuptsdk_pubkey_load(const char *path, zuptsdk_pubkey_t **key_out) {
-    if (!path || !key_out)
+    if (!key_out)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
+    *key_out = NULL;
+    if (!path)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
     FILE *f = fopen(path, "rb");
     if (!f) return ZSDK_FAIL(ZUPTSDK_ERR_IO, "open public key %s", path);
@@ -643,7 +723,10 @@ void zuptsdk_pubkey_destroy(zuptsdk_pubkey_t *key) {
 
 int zuptsdk_privkey_get_public(const zuptsdk_privkey_t *priv,
                                zuptsdk_pubkey_t **pub_out) {
-    if (!priv || !priv->path || !pub_out)
+    if (!pub_out)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
+    *pub_out = NULL;
+    if (!priv || !priv->path)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
     char tmp[512];
     zsdk_tmp_path(tmp, sizeof(tmp), "zsdk_pub");
@@ -669,8 +752,18 @@ int zuptsdk_compress_files(zuptsdk_ctx_t *ctx,
                            const zuptsdk_pubkey_t *recipient_pk,
                            uint8_t **archive_out,
                            size_t *archive_sz) {
-    if (!file_paths || !file_count || !archive_out || !archive_sz)
+    if (!archive_out || !archive_sz)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL/empty parameter");
+    *archive_out = NULL;
+    *archive_sz = 0;
+    if (!file_paths || !file_count)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL/empty parameter");
+    if (file_count > ZUPT_MAX_FILES || file_count > (size_t)INT_MAX)
+        return ZSDK_FAIL(ZUPTSDK_ERR_TOO_LARGE, "too many input files");
+    for (size_t i = 0; i < file_count; i++)
+        if (!file_paths[i])
+            return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG,
+                             "file_paths[%zu] is NULL", i);
 
     zupt_options_t zopts;
     zsdk_apply_options(&zopts, opts, ctx);
@@ -738,7 +831,11 @@ int zuptsdk_compress_buffer(zuptsdk_ctx_t *ctx,
                             const zuptsdk_pubkey_t *recipient_pk,
                             uint8_t **archive_out,
                             size_t *archive_sz) {
-    if (!logical_name || !data || !archive_out || !archive_sz)
+    if (!archive_out || !archive_sz)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
+    *archive_out = NULL;
+    *archive_sz = 0;
+    if (!logical_name || !data)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
 
     char tmp_in[512];
@@ -764,7 +861,9 @@ int zuptsdk_compress_buffer(zuptsdk_ctx_t *ctx,
 
     const char *arc_paths[1]  = { logical_name };
     const char *disk_paths[1] = { tmp_in };
-    zupt_error_t err = zupt_compress_files(tmp_arc, arc_paths, disk_paths, 1, &zopts);
+    zupt_error_t err = (opts && opts->solid)
+        ? zupt_compress_solid(tmp_arc, arc_paths, disk_paths, 1, &zopts)
+        : zupt_compress_files(tmp_arc, arc_paths, disk_paths, 1, &zopts);
 
     zsdk_wipe_options_secrets(&zopts);
     unlink(tmp_in);
@@ -802,7 +901,7 @@ int zuptsdk_extract_to_dir(zuptsdk_ctx_t *ctx,
 
     char tmp[512];
     zsdk_tmp_path(tmp, sizeof(tmp), "zsdk_arc");
-    FILE *f = fopen(tmp, "wb");
+    FILE *f = zsdk_fopen_private(tmp);
     if (!f) return ZSDK_FAIL(ZUPTSDK_ERR_IO, "write temp archive");
     if (fwrite(archive, 1, archive_sz, f) != archive_sz) {
         fclose(f); unlink(tmp);
@@ -830,7 +929,11 @@ int zuptsdk_extract_buffer(zuptsdk_ctx_t *ctx,
                            zuptsdk_secure_buf_t *password,
                            const zuptsdk_privkey_t *recipient_sk,
                            uint8_t **data_out, size_t *data_sz) {
-    if (!archive || !archive_sz || !data_out || !data_sz)
+    if (!data_out || !data_sz)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
+    *data_out = NULL;
+    *data_sz = 0;
+    if (!archive || !archive_sz)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
 
     char tmpdir[512];
@@ -1072,7 +1175,10 @@ int zuptsdk_archive_info_read(zuptsdk_ctx_t *ctx,
                               const uint8_t *archive, size_t archive_sz,
                               zuptsdk_archive_info_t **info_out) {
     (void)ctx;
-    if (!archive || !info_out)
+    if (!info_out)
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
+    *info_out = NULL;
+    if (!archive)
         return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "NULL parameter");
     if (archive_sz < 64) return ZSDK_FAIL(ZUPTSDK_ERR_BAD_ARCHIVE, "too small");
 
@@ -1086,8 +1192,8 @@ int zuptsdk_archive_info_read(zuptsdk_ctx_t *ctx,
     zuptsdk_archive_info_t *i = (zuptsdk_archive_info_t *)zsdk_calloc(1, sizeof(*i));
     if (!i) return ZSDK_FAIL(ZUPTSDK_ERR_NO_MEMORY, "info alloc");
 
-    /* Parse header per format spec: magic[6] | major[1] | minor[1] | flags[4] |
-     * uuid[16] | created[8] | reserved[20] = 56 bytes */
+    /* Parse the packed 64-byte header: magic[6], version[2], flags[4],
+     * creation_time[8], archive_id[16], then offsets/reserved fields. */
     i->format_major = archive[6];
     i->format_minor = archive[7];
     uint32_t flags = (uint32_t)archive[8]      | ((uint32_t)archive[9]  << 8)
@@ -1096,24 +1202,50 @@ int zuptsdk_archive_info_read(zuptsdk_ctx_t *ctx,
     i->is_pq_hybrid   = (flags & ZUPT_FLAG_PQ_HYBRID)   != 0;
     i->is_solid       = (flags & ZUPT_FLAG_SOLID)       != 0;
     i->is_dedup       = (flags & ZUPT_FLAG_DEDUP)       != 0;
-    i->is_disk_image  = 0; /* heuristic: detect later */
+    i->is_disk_image  = (flags & ZUPT_FLAG_DISK_IMAGE) != 0;
 
     /* UUID hex string */
     char uuid[37] = {0};
     snprintf(uuid, sizeof(uuid),
              "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-             archive[12],archive[13],archive[14],archive[15],
-             archive[16],archive[17],archive[18],archive[19],
              archive[20],archive[21],archive[22],archive[23],
-             archive[24],archive[25],archive[26],archive[27]);
+             archive[24],archive[25],archive[26],archive[27],
+             archive[28],archive[29],archive[30],archive[31],
+             archive[32],archive[33],archive[34],archive[35]);
     i->uuid_str = zsdk_strdup(uuid);
+    if (!i->uuid_str) {
+        zsdk_free_internal(i);
+        return ZSDK_FAIL(ZUPTSDK_ERR_NO_MEMORY, "uuid alloc");
+    }
 
-    /* Created timestamp: little-endian uint64 at offset 28 */
+    /* Created timestamp: little-endian uint64 at offset 12. */
     uint64_t ts = 0;
-    for (int k = 0; k < 8; k++) ts |= (uint64_t)archive[28 + k] << (k * 8);
+    for (int k = 0; k < 8; k++) ts |= (uint64_t)archive[12 + k] << (k * 8);
     i->created_unix = (int64_t)ts;
     i->size = archive_sz;
-    i->block_count = 0; /* would need full parse to count */
+
+    /* The footer stores total_blocks as a little-endian uint64. Treat a
+     * missing footer as partial metadata rather than reading before the
+     * supplied buffer, and saturate the legacy uint32 getter. */
+    if (archive_sz >= sizeof(zupt_archive_header_t) + sizeof(zupt_footer_t)) {
+        const uint8_t *footer = archive + archive_sz - sizeof(zupt_footer_t);
+        uint64_t index_offset = 0;
+        uint32_t footer_version = (uint32_t)footer[28]
+                                | ((uint32_t)footer[29] << 8)
+                                | ((uint32_t)footer[30] << 16)
+                                | ((uint32_t)footer[31] << 24);
+        for (int k = 0; k < 8; k++)
+            index_offset |= (uint64_t)footer[k] << (k * 8);
+        if (memcmp(footer + 24, "ZEND", 4) == 0 && footer_version == 1 &&
+            index_offset >= sizeof(zupt_archive_header_t) &&
+            index_offset < archive_sz - sizeof(zupt_footer_t)) {
+            uint64_t blocks = 0;
+            for (int k = 0; k < 8; k++)
+                blocks |= (uint64_t)footer[8 + k] << (k * 8);
+            i->block_count = blocks > UINT32_MAX ? UINT32_MAX
+                                                 : (uint32_t)blocks;
+        }
+    }
 
     *info_out = i;
     return ZUPTSDK_OK;

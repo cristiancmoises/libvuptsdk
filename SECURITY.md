@@ -13,28 +13,41 @@ PGP key: TBD (will be published at https://git.securityops.co/cristiancmoises/li
 
 ---
 
+## Release scope
+
+The source-built `libvuptsdk-base` and the frozen full-ABI binary do not expose
+the same protocol surface. The base archive API supports unencrypted archives,
+PBKDF2-SHA256 plus AES-256-CTR/HMAC password archives, and the legacy
+ML-KEM-768/X25519 hybrid archive mode. The XChaCha20-Poly1305, Argon2id,
+key-commitment and `easy_*` descriptions below apply to the frozen full ABI,
+whose complete source is not present here. They must not be inferred for the
+base package. See README.md and the known limitations before deployment.
+
+---
+
 ## Threat model
 
 libvuptsdk is designed to defend against the following adversaries:
 
 | Adversary | Capability | Mitigation |
 |---|---|---|
-| **Network passive** | Read traffic | All on-disk artifacts are AEAD; no recovery without key |
-| **Network active (MitM)** | Modify traffic | KEM ciphertext + AEAD MAC reject any tamper |
-| **Storage attacker** | Read/modify archives at rest | AEAD on all encrypted blocks; key commitment prevents two-key attack |
-| **Compromised endpoint (post-key)** | Read keys after exfiltration | Forward secrecy via per-archive ephemeral KEM session |
-| **Quantum adversary** | Run Shor's algorithm | Hybrid construction: breaking ECDH leaves ML-KEM intact (and vice-versa); both must fall to recover the key |
-| **Side-channel (timing)** | Observe execution time | Constant-time AES, X25519, MAC verify (Jasmin-verified) |
-| **Side-channel (memory)** | Read process memory | `mlock()` on key buffers; explicit zeroization on free |
-| **Fault injection** | Glitch decapsulation | Anti-fault decap re-encrypts and compares — single-fault detection |
+| **Network passive** | Read traffic | Encrypted modes protect payloads; unencrypted archives provide no confidentiality |
+| **Network active (MitM)** | Modify traffic | Encrypted blocks authenticate modifications; plaintext XXH64 is not an authenticity mechanism |
+| **Storage attacker** | Read/modify archives at rest | Same boundary as network storage: protection depends on choosing an encrypted mode |
+| **Quantum adversary** | Attack public-key cryptography | Hybrid mode combines ML-KEM-768 and X25519; no post-quantum claim applies to password or plaintext mode |
+| **Side-channel (timing)** | Observe execution time | Current ML-KEM dynamic evidence is reported below; the default portable AES path has a known cache-timing limitation |
+| **Side-channel (memory)** | Read process memory | Best-effort `mlock()` plus explicit zeroization reduce exposure but do not defeat process compromise |
+| **Fault injection** | Glitch decapsulation | Re-encryption consistency checks detect some faults; comprehensive fault resistance is not claimed |
 
 ### NOT defended against
 
 - **Compromised endpoint pre-key**: if attacker controls the machine
   during key generation, no cryptographic primitive can save you.
-- **Cryptanalytic break of ML-KEM-768 AND X25519 simultaneously**: the
-  hybrid construction requires breaking both. We assume current best
-  attacks (none for ML-KEM, baby-step-giant-step for X25519 ≈ 2^126).
+- **Compromise of a long-term recipient private key**: recorded archives for
+  that key do not have forward secrecy and can be decrypted after compromise.
+- **Cryptanalytic failure or implementation compromise**: this project has
+  not independently established the security of its primitive combination;
+  use the applicable standards and deployment policy as the authority.
 - **Watermarking / traffic analysis**: encrypted archive sizes leak
   rough plaintext size.
 - **Coercion of a user to reveal their key**: this is a legal/social
@@ -99,20 +112,21 @@ shared_key ← Argon2id(password, salt, m=64MB, t=3, p=1, len=32)
 ciphertext ← AEAD(shared_key, plaintext, nonce=random_24B, aad=metadata)
 ```
 
-Argon2id parameters are RFC 9106 IETF recommendation (memory-hard
-defends against ASIC/GPU attackers; t=3 iterations chosen so that a
-modern desktop takes ~250 ms).
+These are project-selected Argon2id parameters, not the exact RFC 9106
+recommended profile. Their cost and suitability must be measured on the
+deployment target.
 
 ### AEAD layer
 
 | Algorithm | Mode | Default? | Reason |
 |---|---|---|---|
-| **XChaCha20-Poly1305** | Online AEAD | Yes (v2.x) | Random 24-byte nonce → no nonce-reuse risk; software-fast |
+| **XChaCha20-Poly1305** | Online AEAD | Yes (full ABI v2.x) | A random 24-byte nonce makes accidental collision unlikely; software-fast |
 | **AES-256-SIV** | DAE / nonce-misuse-resistant | Optional | When nonce uniqueness can't be guaranteed (e.g., dedup mode) |
 | **AES-256-CTR + HMAC-SHA256** | Encrypt-then-MAC | Legacy only | Backward compat with zupt 2.0/2.1 archives |
 
-Constant-time AES is provided by Jasmin-compiled assembly on x86_64 with
-AES-NI; falls back to bitsliced AES on platforms without AES-NI.
+Optional Jasmin assembly contains an AES-NI implementation for x86-64. The
+default build does not enable it and falls back to the pure-C table-based AES
+described in the limitations below.
 
 ### Hash functions
 
@@ -120,9 +134,9 @@ AES-NI; falls back to bitsliced AES on platforms without AES-NI.
 - **SHA3-256** (Keccak) for HKDF and modern construction
 - **BLAKE2b** for key commitment (also faster than SHA-2 in software)
 
-### Constant-time primitives (Jasmin-verified)
+### Optional Jasmin sources (not reverified for this candidate)
 
-| Primitive | Source | Verified property |
+| Primitive | Source | Intended property |
 |---|---|---|
 | AES-256-CTR (single-block) | `jasmin/zupt_aes_ctr.jazz` | `Constant Time` register transparency type |
 | AES-256-CTR (4-way pipelined) | `jasmin/zupt_aes_ctr4.jazz` | `Constant Time` |
@@ -130,8 +144,11 @@ AES-NI; falls back to bitsliced AES on platforms without AES-NI.
 | ML-KEM cmov-style select | `jasmin/zupt_mlkem_select.jazz` | `Constant Time` |
 | X25519 field cswap | `jasmin/zupt_x25519_fe.jazz` | `Constant Time` |
 
-Verified by `jasminc 2026.03.0`. Sources in `jasmin/`; compiled `.s`
-shipped to avoid jasminc dependency at build time.
+The repository records that these files were generated with `jasminc
+2026.03.0`, and ships `.jazz` plus `.s` files. That compiler/type-checking run
+was not reproduced for 2.0.4-base.1, and the default build does not link these
+objects. Treat the record as historical until the generation command and
+verifier output are made reproducible.
 
 ---
 
@@ -145,10 +162,8 @@ shipped to avoid jasminc dependency at build time.
 
 Full report: see [AUDIT.md](AUDIT.md).
 
-External independent audit: **not yet performed**. Cost rather than
-engineering — the budget for an external review by a reputable
-crypto firm is in the $30-60k range. We accept this gap and document
-it explicitly rather than claim audits we haven't paid for.
+External independent audit: **not yet performed**. This gap is documented
+rather than being presented as completed assurance.
 
 ---
 
@@ -161,17 +176,18 @@ it explicitly rather than claim audits we haven't paid for.
    requires either an external audit or open-sourcing the source.
    Tracked in CHANGELOG.md as the top open item for next minor.
 2. **AES-256-CTR + HMAC legacy mode** is not nonce-misuse-resistant.
-   Old archives use this for backward compatibility; new archives use
-   XChaCha20-Poly1305 by default.
-3. **Argon2id parameters are baked in** (m=64MB, t=3, p=1). For very
+   The base archive API uses this construction for encrypted blocks. The
+   XChaCha20-Poly1305 default belongs to the frozen full-ABI `easy_*` surface.
+3. **Argon2id parameters are baked in** (m=64 MiB, t=3, p=1) in the frozen
+   full-ABI password API. They are project-selected parameters, not the exact
+   RFC 9106 recommended profile. For very
    weak passwords or extreme adversaries (nation-state ASIC), users
    should use the public-key mode instead.
-4. **ML-KEM-768 only** (not ML-KEM-1024). Chosen for size: 768 gives
-   192-bit classical / 96-bit quantum security, sufficient for
-   anything classified below "TS // SI / TK / G / HCS-P". Users with
-   higher requirements should wait for ML-KEM-1024 (planned 2.1.x).
-5. **x86_64 prebuilt only**. AArch64 builds from source but the
-   canonical prebuilt is x86_64 only currently. Tracked.
+4. **ML-KEM-768 only** (not ML-KEM-1024). ML-KEM-768 is NIST security
+   category 3. Select algorithms from the actual deployment policy rather than
+   inferring suitability for classified or regulated data from this document.
+5. **x86_64 prebuilt only**. The source build has architecture-selection code
+   for AArch64, but this candidate has no AArch64 runtime validation.
 6. **ML-KEM-768 FIPS 203 conformance is a from-source property; the
    shipped prebuilt is not yet rebuilt from the fixed source.** The
    2026-07-02 conformance fix (see `MLKEM_CONFORMANCE_FIX.md`) corrected
@@ -189,10 +205,10 @@ it explicitly rather than claim audits we haven't paid for.
    uses a byte-indexed S-box (SubBytes and key schedule), which is a
    cache-timing side channel against an attacker sharing a core. This path
    is the portable fallback used when the library is built **without**
-   `-DZUPT_USE_JASMIN`; the Jasmin-verified AES-NI backend is
-   constant-time. For untrusted-coresidency threat models, build with the
-   Jasmin backend or use the XChaCha20-Poly1305 AEAD (the default for new
-   archives), which has no secret-dependent table lookups.
+   `-DZUPT_USE_JASMIN`; an optional AES-NI assembly backend is present but its
+   recorded Jasmin verification was not reproduced for this candidate. The
+   XChaCha20-Poly1305 mode belongs to the frozen full ABI and is not available
+   from the base archive API.
 8. **VaptVupt codec archive format: from-source vs prebuilt.** The source-built
    library embeds VaptVupt 2.65.11, while the canonical full-ABI prebuilt still
    contains an older decoder and cannot be rebuilt from this public tree. The
@@ -203,7 +219,18 @@ it explicitly rather than claim audits we haven't paid for.
    block payloads are authenticated before decoding; unencrypted archive blocks
    rely on the bounded decoder followed by the stored plaintext XXH64 check.
    Full interoperation requires regenerating and re-auditing the prebuilt from
-   the complete current source. See the Unreleased section of CHANGELOG.md.
+   the complete current source. See the 2.0.4-base.1 section of CHANGELOG.md.
+9. **The base callback notifications are reserved.** The source-built
+   prerelease stores registered progress and log callbacks but does not invoke
+   them yet. Normal progress and summaries are suppressed; the embedded codec
+   can still write an error diagnostic to stderr. Callers must use return codes
+   and `zuptsdk_last_error_detail()` as the authoritative result.
+
+The base extraction APIs default to a 16 GiB total-output ceiling. Configure a
+smaller budget with `zuptsdk_ctx_set_max_decompressed()` for untrusted inputs.
+Setting zero disables the ceiling and is not recommended. The old options
+setter does not control extraction because extraction calls do not receive an
+options object.
 
 ---
 
@@ -211,17 +238,17 @@ it explicitly rather than claim audits we haven't paid for.
 
 Beyond the cryptographic primitives, libvuptsdk implements:
 
-- `mlock()` on private-key buffers so they don't swap to disk
+- Best-effort `mlock()` on private-key buffers; OS limits can make it fail
 - Explicit `zupt_secure_zero()` on free for all key material
 - Stack canary protection (`-fstack-protector-strong`)
 - RELRO + BIND_NOW (`-Wl,-z,relro,-z,now`)
 - PIC + ASLR-friendly shared library
 - `-D_FORTIFY_SOURCE=2` for libc string/memory call hardening
 - No use of `gets`, `strcpy`, `sprintf`, or other unsafe functions
-- All length-prefixed parsing uses bounds checks; no `strcpy(out, in)`
-  where `len(in)` is attacker-controlled
-- Constant-time MAC compare (Jasmin-verified) — no early termination
-  on first mismatch byte
+- Focused bounds checks and malformed-input tests on reachable archive paths;
+  this is not a proof that every parser is defect-free
+- A full-byte MAC comparison in the portable path; current dynamic timing
+  evidence and its limits are reported below
 
 ---
 
@@ -231,7 +258,7 @@ The following table reports the actual hardening properties of the
 shipped binaries, verified by `tools/checksec_lib.sh` (a checksec-style
 audit script).
 
-### Source build (`libvuptsdk-base.so.2.0.3`)
+### Source build (`libvuptsdk-base.so.2.0.4`)
 
 | Property | Status | Notes |
 |---|---|---|
@@ -241,7 +268,7 @@ audit script).
 | Stack canary | ✓ | `__stack_chk_fail` present |
 | FORTIFY_SOURCE | ✓ | 7 `_chk` symbols |
 | RPATH/RUNPATH | ✓ none | No insecure load paths |
-| Symbol versioning | ✓ ZUPTSDK_1.0 | Stable ABI guarantees |
+| Symbol versioning | ✓ ZUPTSDK_1.0 + 1.1 | Versioned base ABI |
 | Dangerous symbols | ✓ none | No `gets`/`system`/`exec*` |
 
 ### Frozen prebuilt (`libvuptsdk.so.2.0.3`)
@@ -265,8 +292,9 @@ load. This is a defense-in-depth gap — exploits that rely on overwriting
 GOT entries are easier on the canonical than on the source build. Tracked
 as next-minor fix; rebuild the prebuilt with `-Wl,-z,relro,-z,now`.
 
-The source-build library does have Full RELRO and is the recommended
-build for high-security deployments.
+The source-build library does have Full RELRO and permits source-level review.
+That hardening result does not remove the portable AES timing limitation above
+or replace an independent cryptographic audit.
 
 ---
 
@@ -304,11 +332,10 @@ rejects malformed blobs before any crypto is performed. This leaks "this
 isn't even a libvuptsdk blob" but does not leak any information about a
 properly-formatted blob's contents or key.
 
-### Constant-time primitives (Jasmin-verified)
+### Jasmin source inventory (historical)
 
-The following primitives have Jasmin-language source files
-(`jasmin/*.jazz`) that compile to assembly via `jasminc` with formal
-constant-time type-checking:
+The following primitives have Jasmin-language source files (`jasmin/*.jazz`)
+and checked-in assembly. The table records their intended invariants:
 
 | Primitive | File | Verified property |
 |---|---|---|
@@ -318,8 +345,9 @@ constant-time type-checking:
 | ML-KEM cmov-style select | `zupt_mlkem_select.jazz` | No data-dep branches |
 | X25519 field cswap | `zupt_x25519_fe.jazz` | Constant-time conditional swap |
 
-Compiled with `jasminc 2026.03.0`. The Jasmin type system formally
-proves no operation in these primitives has data-dependent timing.
+The repository records generation with `jasminc 2026.03.0`, but this release
+did not reproduce the verifier command or its output. No new formal-proof
+claim is made for 2.0.4-base.1.
 
 **These primitives are active only when the library is built with
 `-DZUPT_USE_JASMIN`.** In a default build the AES path is the pure-C
@@ -327,18 +355,17 @@ byte-indexed S-box (see limitation 7), which is *not* constant-time; the
 ML-KEM cmov select and X25519 cswap have constant-time pure-C equivalents
 that are always used. Enable the Jasmin backend for constant-time AES.
 
-The **non-CT-critical surrounding code** (key schedule setup, format
-parsing, heap allocation) is not Jasmin-verified — it operates on data
-whose timing leakage does not affect cryptographic security per
-public-key cryptography conventions.
+Key scheduling, format parsing and allocation are outside the Jasmin source
+inventory and were not formally assessed for timing behavior.
 
 ### ML-KEM constant-time posture and division portability
 
-The ML-KEM-768 decapsulation is verified constant-time on the shipped
-toolchain by two independent methods (dudect statistical timing, max |t|
-≈ 1–2.5 well under the 4.5 threshold; ctgrind/valgrind taint-tracking,
-zero secret-dependent branches). See `CT_VERIFICATION.md` and
-`conformance-suite/ct/`. One portability caveat, disclosed honestly:
+The ML-KEM-768 decapsulation has been tested for timing leakage on the shipped
+x86-64 toolchain by two complementary dynamic methods. In the 2026-09-06
+rerun, dudect reported maximum |t| values of 1.389 and 2.680, below the 4.5
+evidence threshold, and ctgrind/Valgrind reported no secret-dependent branch.
+These results are evidence, not a proof of constant-time behavior. See
+`CT_VERIFICATION.md` and `conformance-suite/ct/`. One portability caveat:
 the polynomial compression/encoding in `src/zupt_mlkem.c` divides and
 reduces by the constant `q = 3329` on secret-derived data
 (KyberSlash-class, CVE-2024-37880 family). On x86-64 with gcc/clang these
@@ -392,7 +419,8 @@ length (0 to 8192 bytes) fed to `zuptsdk_easy_decrypt`:
 | Memory errors (under ASAN, source build) | 0 |
 | Hangs (>10 sec timeout) | 0 |
 
-The parser robustly rejects all malformed input.
+This particular random corpus was rejected without a crash; it does not cover
+all malformed inputs or prove parser safety.
 
 ---
 

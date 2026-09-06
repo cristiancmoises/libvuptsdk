@@ -114,13 +114,13 @@ static void fe_tobytes(uint8_t s[32], const fe h) {
     for (int i = 0; i < 8; i++) s[24+i] = (uint8_t)(combined >> (8*i));
 }
 
-/* CT-REQUIRED: conditional swap — no branches on secret bit.
- * JASMIN-VERIFIED: First 4 limbs swapped by Jasmin when available;
- * 5th limb swapped in C (same constant-time XOR pattern). */
+/* CT-REQUIRED: conditional swap — no branches on secret bit. The optional
+ * Jasmin assembly handles four limbs; C handles the fifth with the same
+ * masked-XOR structure. */
 static void fe_cswap(fe a, fe b, uint64_t flag) {
     uint64_t mask = -(uint64_t)(flag & 1);
 #ifdef ZUPT_USE_JASMIN
-    /* JASMIN-VERIFIED: CT swap of first 32 bytes (4×u64).
+    /* Optional Jasmin-generated swap of the first 32 bytes (4×u64).
      * The Jasmin function operates on 4 consecutive u64 values. */
     zupt_fe_cswap(a, b, flag & 1);
     /* 5th limb: C fallback (same CT pattern) */

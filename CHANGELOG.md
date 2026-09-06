@@ -7,7 +7,30 @@ at the ABI level (see README.md "Versioning").
 
 ---
 
-## [Unreleased]
+## [2.0.4-base.1] — 2026-09-06
+
+This prerelease publishes only the reproducible `libvuptsdk-base` surface. It
+does not relabel or redistribute the frozen full-ABI 2.0.3 binary.
+
+### Security and robustness
+
+- Added a 16 GiB default extraction ceiling to each context and the
+  `zuptsdk_ctx_set_max_decompressed()` API. Extraction validates both the
+  archive index before creating output files and the bytes actually decoded,
+  returning `ZUPTSDK_ERR_TOO_LARGE` when the budget is exceeded.
+- Private temporary files now use exclusive, no-follow creation on POSIX.
+  Private-key copies establish mode 0600 before writing and refuse a final
+  symbolic link where `O_NOFOLLOW` is available; public-key copies use the
+  same rule with mode 0644. Non-regular output targets are rejected.
+- Corrected archive metadata offsets for creation time and UUID, read the disk
+  flag, and obtain the block count from a footer with valid magic, version and
+  index offset instead of always reporting zero.
+- Solid extraction now requires decoded data to match the declared total
+  exactly, rejects premature index blocks or oversized final blocks, and
+  removes an output whose offset or checksum validation fails.
+- Suppressed normal extract and verify summaries when the core is called
+  through the base SDK. Error diagnostics may still be written to stderr and
+  are documented as such.
 
 ### Changed
 
@@ -23,6 +46,9 @@ at the ABI level (see README.md "Versioning").
   format policy. Its old level-3 FAST cutoff and missing compatibility switch
   could otherwise produce different frames solely because thread count
   changed.
+- Made the source-built base library the default build and install artifact.
+  It has a separate library name, include directory and `vuptsdk-base`
+  pkg-config module so it can coexist with the legacy full SDK.
 
 ### Tests
 
@@ -31,6 +57,9 @@ at the ABI level (see README.md "Versioning").
   truncated prefix of a generated frame, invalid window and BCJ metadata,
   nested-checksum delegation, and BCJ decode. The same gate is built with
   AddressSanitizer and UndefinedBehaviorSanitizer by `make test-asan`.
+- Expanded the public smoke gate to exercise an actual VaptVupt archive
+  compression, metadata read, verification, extraction-limit rejection and
+  byte-exact extraction.
 
 ### Licensing and packaging
 
@@ -39,14 +68,11 @@ at the ABI level (see README.md "Versioning").
   AGPL/commercial-option notice does not relicense the embedded codec.
 - Updated the per-file license gate to check the SDK and codec scopes
   separately.
-- Source distributions now include all AGPL, GPL, commercial-option, and
-  provenance notices, the conformance suite, and the Brazilian Portuguese
-  README, and exclude the frozen full-ABI prebuilt. Their filename explicitly
-  marks them as an unreleased, source-only codec integration instead of
-  reusing the already-released SDK 2.0.3 identity. Debian and RPM runtime
-  packaging is explicitly blocked until that library can be rebuilt and
-  re-audited from complete source; the recipes are already prepared to include
-  all notices once the gate is resolved.
+- Source distributions now include the supported base header, implementation,
+  tests, license/provenance notices and English/Brazilian Portuguese
+  documentation, and exclude the frozen full-ABI prebuilt and legacy-only
+  bindings. Debian and RPM scripts create distinctly named base runtime and
+  development packages and refuse a shared object containing RPATH/RUNPATH.
 
 ### Documentation
 
@@ -503,18 +529,19 @@ release. Findings and fixes:
 
 ---
 
-## ABI compatibility commitment
+## ABI boundaries
 
-libvuptsdk follows strict ABI versioning. The contract:
+The source release and frozen full SDK are deliberately parallel artifacts:
 
-- **No symbol in `ZUPTSDK_1.0` will ever be removed or change behavior.**
-- **No symbol in `ZUPTSDK_1.0` will change its function signature.**
-- **New symbols added in 2.x will go into `ZUPTSDK_2.x` blocks** in the
-  version script. Old code linked against `ZUPTSDK_1.0` keeps working.
-- **The C++ header `zuptsdk.hpp` is a thin RAII wrapper** over the C
-  ABI. C ABI compatibility is what matters; the header may evolve.
-- Any incompatible ABI change is a `libvuptsdk.so.3` event (major
-  SONAME bump, separate parallel-installable library).
+- `libvuptsdk-base.so.2` keeps its existing `ZUPTSDK_1.0` signatures and uses
+  `ZUPTSDK_1.1` for the additive context extraction-limit setter.
+- `libvuptsdk.so.2.0.3` retains its historical `ZUPTSDK_1.0` through
+  `ZUPTSDK_2.1` symbols, but is not rebuilt or relabeled by this prerelease.
+- Headers and bindings that require full-only symbols are not installed in the
+  base development package.
+- A future complete source implementation must reconcile both symbol sets and
+  pass an explicit compatibility review; the base prerelease does not
+  manufacture that equivalence.
 
 ---
 

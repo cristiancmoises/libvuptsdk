@@ -1,122 +1,100 @@
-#!/bin/bash
+#!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
 # Copyright (c) 2026 Cristian Cezar Moisés
-# Build libvuptsdk SRPM tarball.
-# Produces a versioned SRPM-equivalent tarball containing the generated spec
-# and deterministic source archive.
-# 
-# To build the actual RPM on a system with rpmbuild:
-#   tar xzf libvuptsdk-2.0.0.srpm.tar.gz
-#   rpmbuild -bb SPECS/libvuptsdk.spec
-set -e
+# Build source-derived libvuptsdk-base RPM and source RPM packages.
+set -eu
+
 cd "$(dirname "$0")/.."
 
-echo "error: RPM runtime packaging is disabled for this source revision." >&2
-echo "The tracked full-ABI prebuilt is frozen and does not contain codec 2.65.11." >&2
-echo "Regenerate and re-audit the full library from complete source before packaging." >&2
-exit 2
-
-# Derive the version from the Makefile (single source of truth) unless overridden.
-VERSION="${VERSION:-$(make -s printversion)}"
-SOVERSION="${SOVERSION:-2}"
-
-# 1. Build source tarball
-make dist
-SRC_TAR="dist/libvuptsdk-${VERSION}.tar.gz"
-
-if [ ! -f "$SRC_TAR" ]; then
-    echo "Source tarball not built: $SRC_TAR"; exit 1
+if ! command -v rpmbuild >/dev/null 2>&1; then
+    echo "error: rpmbuild is required" >&2
+    exit 2
 fi
 
-# 2. Generate spec file
-SPEC_DIR=$(mktemp -d)
-mkdir -p "$SPEC_DIR/SPECS" "$SPEC_DIR/SOURCES"
+VERSION=$(make -s printversion)
+RELEASE=$(make -s printrelease)
+SOVERSION=${SOVERSION:-2}
+RPM_RELEASE=${RPM_RELEASE:-0.1.base1}
+RPMBUILD_FLAGS=${RPMBUILD_FLAGS:-}
+OUT_DIR=${OUT_DIR:-$(pwd)/dist/packages}
+DIST_NAME=libvuptsdk-base-${RELEASE}
+SOURCE_TAR=dist/${DIST_NAME}.tar.gz
 
-cat > "$SPEC_DIR/SPECS/libvuptsdk.spec" <<SPEC
-%define version    ${VERSION}
-%define soversion  ${SOVERSION}
+make dist
+if [ ! -f "$SOURCE_TAR" ]; then
+    echo "error: expected source archive was not produced: $SOURCE_TAR" >&2
+    exit 1
+fi
 
-Name:           libvuptsdk
-Version:        %{version}
-Release:        1%{?dist}
-Summary:        Post-quantum hybrid cryptography library
-License:        AGPLv3+
+mkdir -p "$OUT_DIR"
+TOPDIR=$(mktemp -d "${TMPDIR:-/tmp}/libvuptsdk-rpm.XXXXXXXX")
+trap 'rm -rf -- "$TOPDIR"' EXIT HUP INT TERM
+mkdir -p "$TOPDIR/BUILD" "$TOPDIR/BUILDROOT" "$TOPDIR/RPMS" \
+    "$TOPDIR/SOURCES" "$TOPDIR/SPECS" "$TOPDIR/SRPMS"
+cp "$SOURCE_TAR" "$TOPDIR/SOURCES/"
+
+cat > "$TOPDIR/SPECS/libvuptsdk-base.spec" <<EOF
+Name:           libvuptsdk-base
+Version:        $VERSION
+Release:        $RPM_RELEASE%{?dist}
+Summary:        Source-built VaptVupt archive SDK
+License:        AGPL-3.0-or-later AND GPL-3.0-or-later
 URL:            https://git.securityops.co/cristiancmoises/libvuptsdk
-Source0:        libvuptsdk-%{version}.tar.gz
+Source0:        ${DIST_NAME}.tar.gz
 
-BuildRequires:  gcc make pkgconfig
-Requires:       glibc
+BuildRequires:  gcc
+BuildRequires:  make
 
 %description
-libvuptsdk provides a stable C ABI for post-quantum hybrid encryption
-(ML-KEM-768 + X25519), authenticated encryption (XChaCha20-Poly1305 or
-AES-256-SIV), Argon2id password mode, and streaming AEAD.
+libvuptsdk-base provides a reproducible archive API backed by the VaptVupt
+2.65.11 codec. It is intentionally separate from the frozen full-ABI
+libvuptsdk 2.0.3 compatibility binary.
 
 %package devel
-Summary:        Development files for libvuptsdk
+Summary:        Development files for libvuptsdk-base
 Requires:       %{name}%{?_isa} = %{version}-%{release}
 
 %description devel
-Headers, static archive, pkg-config file, and development docs for
-libvuptsdk. Install this to build applications against libvuptsdk.
+The supported public header, static library and pkg-config metadata for
+libvuptsdk-base $RELEASE.
 
 %prep
-%setup -q -n libvuptsdk-%{version}
+%setup -q -n $DIST_NAME
 
 %build
-make %{?_smp_mflags}
+%make_build
+
+%check
+%make_build test
 
 %install
-make install DESTDIR=%{buildroot} PREFIX=/usr LIBDIR=/usr/%{_lib}
-
-%post -p /sbin/ldconfig
-%postun -p /sbin/ldconfig
+%make_install PREFIX=%{_prefix} LIBDIR=%{_libdir} INCLUDEDIR=%{_includedir} STRIP_INSTALL=0
 
 %files
-/usr/%{_lib}/libvuptsdk.so.%{version}
-/usr/%{_lib}/libvuptsdk.so.%{soversion}
+%{_libdir}/libvuptsdk-base.so.$VERSION
+%{_libdir}/libvuptsdk-base.so.$SOVERSION
 %doc README.md README.pt-BR.md CHANGELOG.md SECURITY.md NOTICE
 %license LICENSE LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL
 
 %files devel
-/usr/%{_lib}/libvuptsdk.so
-/usr/%{_lib}/libvuptsdk.a
-/usr/%{_lib}/pkgconfig/vuptsdk.pc
-/usr/include/zuptsdk.h
-/usr/include/zuptsdk_easy.h
-/usr/include/zuptsdk.hpp
-/usr/include/zuptsdk_metrics.h
-/usr/include/zsdk_aes256_gcm_siv.h
-/usr/include/zsdk_aes256_siv.h
-/usr/include/zsdk_argon2id.h
-/usr/include/zsdk_blake2b.h
-/usr/include/zsdk_hkdf.h
-/usr/include/zsdk_xchacha20_poly1305.h
+%{_libdir}/libvuptsdk-base.so
+%{_libdir}/libvuptsdk-base.a
+%{_libdir}/pkgconfig/vuptsdk-base.pc
+%{_includedir}/libvuptsdk-base/zuptsdk.h
+%doc doc/API_REFERENCE.md doc/API_REFERENCE.pt-BR.md doc/example.c
 
 %changelog
-* Wed Apr 29 2026 Cristian Cezar Moisés <zupt@riseup.net> - %{version}-1
-- libvuptsdk split out as standalone repo
-- Two-library build (source + canonical prebuilt)
-- See CHANGELOG.md for details
-SPEC
+* Sun Sep 06 2026 Cristian Cezar Moisés <zupt@riseup.net> - $VERSION-$RPM_RELEASE
+- Publish the source-built base SDK with VaptVupt 2.65.11
+EOF
 
-# 3. Copy source into SOURCES dir
-cp "$SRC_TAR" "$SPEC_DIR/SOURCES/"
+# RPMBUILD_FLAGS=--nodeps is useful only when validating the recipe on a
+# non-RPM host whose compiler is not registered in the RPM database.
+# shellcheck disable=SC2086
+rpmbuild $RPMBUILD_FLAGS --define "_topdir $TOPDIR" \
+    --define "_smp_mflags -j2" -ba \
+    "$TOPDIR/SPECS/libvuptsdk-base.spec"
+find "$TOPDIR/RPMS" "$TOPDIR/SRPMS" -type f -name '*.rpm' \
+    -exec cp {} "$OUT_DIR/" \;
 
-# 4. Build SRPM-equivalent tarball
-SRPM_TAR="/tmp/libvuptsdk-${VERSION}.srpm.tar.gz"
-cd "$SPEC_DIR" && tar -czf "$SRPM_TAR" SPECS SOURCES
-rm -rf "$SPEC_DIR"
-
-if command -v rpmbuild >/dev/null 2>&1; then
-    echo "Building actual RPM with rpmbuild..."
-    RPM_TOPDIR=$(mktemp -d)
-    tar xzf "$SRPM_TAR" -C "$RPM_TOPDIR"
-    rpmbuild --define "_topdir $RPM_TOPDIR" -bb "$RPM_TOPDIR/SPECS/libvuptsdk.spec"
-    cp "$RPM_TOPDIR"/RPMS/x86_64/*.rpm /tmp/
-    rm -rf "$RPM_TOPDIR"
-    echo "Built RPM(s) in /tmp"
-else
-    echo "rpmbuild not available — SRPM-equivalent tarball at: $SRPM_TAR"
-    echo "  Distros: tar -xzf $SRPM_TAR && rpmbuild -bb SPECS/libvuptsdk.spec"
-fi
+echo "Built RPM assets in: $OUT_DIR"

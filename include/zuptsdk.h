@@ -13,11 +13,10 @@
  * --------------------------------------------------------------------------
  * STABILITY GUARANTEE
  * --------------------------------------------------------------------------
- * Every symbol declared in this header is part of the stable v1.0 ABI and
- * is gated behind the linker version tag ZUPTSDK_1.0. New symbols may be
- * added in minor versions (1.1, 1.2, ...) under new tags (ZUPTSDK_1.1, ...).
- * Existing symbols will never change signature within v1.x. Breaking
- * changes require a major version bump (libvuptsdk.so.2).
+ * This header describes the source-built libvuptsdk-base prerelease. Existing
+ * symbols use ZUPTSDK_1.0; additive symbols use later tags such as
+ * ZUPTSDK_1.1. The frozen full libvuptsdk.so has a different, larger symbol
+ * set and is not interchangeable with this base library.
  *
  * No symbol prefixed with anything other than `zuptsdk_` or `ZUPTSDK_` is
  * part of this ABI. Do not link against internal `zupt_*` symbols even if
@@ -26,11 +25,10 @@
  * --------------------------------------------------------------------------
  * THREAD SAFETY
  * --------------------------------------------------------------------------
- * Every function that takes a `zuptsdk_ctx_t *` operates only on that
- * context's state and on caller-provided buffers. Concurrent calls on
- * DISTINCT contexts are safe (MT-Safe). Concurrent calls on the SAME
- * context are NOT safe (MT-Unsafe-Same-Context) unless explicitly
- * documented otherwise.
+ * Do not use the same context concurrently. The custom allocator is global
+ * and must be configured before any other SDK call. Concurrent operation on
+ * distinct contexts is an intended interface property but has not yet had a
+ * dedicated race-detector validation in this prerelease.
  *
  * --------------------------------------------------------------------------
  * MEMORY OWNERSHIP
@@ -53,22 +51,21 @@
  * --------------------------------------------------------------------------
  * Functions return `int` where 0 == ZUPTSDK_OK and negative values are
  * `zuptsdk_error_t` codes. Use zuptsdk_strerror() for a static description
- * and zuptsdk_last_error_detail(ctx) for a thread-local detailed message
+ * and zuptsdk_last_error_detail() for a thread-local detailed message
  * including filename, line number, and underlying errno where applicable.
  *
- * The library never calls abort(), exit(), or _exit(). It never writes to
- * stdout or stderr unless the caller explicitly enables logging via
- * zuptsdk_ctx_set_log_callback().
+ * The SDK wrapper suppresses normal codec progress and summary output. The
+ * embedded codec may still write a diagnostic to stderr on an error; use the
+ * returned error code and zuptsdk_last_error_detail() as the authoritative
+ * result. Registered log and progress callbacks are reserved in the current
+ * base implementation and are not yet invoked.
  *
  * --------------------------------------------------------------------------
  * SECURE MEMORY
  * --------------------------------------------------------------------------
- * Inputs and outputs containing secret material (passwords, raw keys,
- * decrypted plaintext keys) MUST be passed via `zuptsdk_secure_buffer_t`
- * to ensure mlock()-backed storage and explicit_bzero() on destroy.
- * Passing such material via plain `const uint8_t *` is allowed for
- * convenience but the library cannot guarantee zeroization of caller
- * memory in that case.
+ * Secure buffers attempt mlock() and are explicitly zeroed on destroy.
+ * Resource limits can make mlock() fail; callers must not treat the API as a
+ * guarantee that pages can never be swapped.
  */
 
 #ifndef ZUPTSDK_H
@@ -87,8 +84,8 @@ extern "C" {
 
 #define ZUPTSDK_VERSION_MAJOR 2
 #define ZUPTSDK_VERSION_MINOR 0
-#define ZUPTSDK_VERSION_PATCH 3
-#define ZUPTSDK_VERSION_STRING "2.0.3"
+#define ZUPTSDK_VERSION_PATCH 4
+#define ZUPTSDK_VERSION_STRING "2.0.4-base.1"
 
 /* Compile-time version check helper (negative if header older than required) */
 #define ZUPTSDK_VERSION_AT_LEAST(maj, min, pat) \
@@ -98,7 +95,8 @@ extern "C" {
       ZUPTSDK_VERSION_PATCH >= (pat)))
 
 /**
- * Return the runtime version string of the linked library, e.g. "2.0.3".
+ * Return the runtime version string of the linked library, e.g.
+ * "2.0.4-base.1".
  * The returned pointer is to static storage and must NOT be freed.
  *
  * Use this with the compile-time ZUPTSDK_VERSION_STRING to detect mismatch
@@ -265,9 +263,8 @@ int zuptsdk_set_allocator(const zuptsdk_allocator_t *alloc);
  * ════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Create a new SDK context. Each context holds its own thread pool,
- * progress callback, log callback, and error state. Contexts are
- * cheap to create — a few KB plus the configured thread count.
+ * Create a new SDK context. The context stores thread-count and extraction
+ * policy. Worker resources are created by operations when needed.
  *
  * @param ctx_out [out,transfers] pointer to receive new context
  * @return ZUPTSDK_OK on success, ZUPTSDK_ERR_NO_MEMORY on alloc failure.
@@ -276,7 +273,7 @@ int zuptsdk_set_allocator(const zuptsdk_allocator_t *alloc);
 int zuptsdk_ctx_create(zuptsdk_ctx_t **ctx_out);
 
 /**
- * Destroy a context. Frees all owned resources including thread pool.
+ * Destroy a context and its owned state.
  * Safe to call with NULL. After this call, the pointer is invalid.
  */
 void zuptsdk_ctx_destroy(zuptsdk_ctx_t *ctx);
@@ -288,16 +285,24 @@ void zuptsdk_ctx_destroy(zuptsdk_ctx_t *ctx);
 int zuptsdk_ctx_set_threads(zuptsdk_ctx_t *ctx, int threads);
 
 /**
- * Set progress callback for long-running operations on this context.
- * Pass NULL fn to clear. userdata is opaque to the library.
+ * Limit total output produced by extraction calls on this context.
+ * The default is 16 GiB. 0 disables the limit and is not recommended for
+ * untrusted archives.
+ */
+int zuptsdk_ctx_set_max_decompressed(zuptsdk_ctx_t *ctx,
+                                     uint64_t max_bytes);
+
+/**
+ * Reserve a progress callback on this context. The current base prerelease
+ * stores the callback but does not invoke it yet. Pass NULL fn to clear it.
  */
 int zuptsdk_ctx_set_progress_callback(zuptsdk_ctx_t *ctx,
                                       zuptsdk_progress_fn fn,
                                       void *userdata);
 
 /**
- * Set log callback for diagnostic messages on this context.
- * Pass NULL fn to disable logging (default).
+ * Reserve a log callback on this context. The current base prerelease stores
+ * the callback but does not invoke it yet. Pass NULL fn to clear it.
  */
 int zuptsdk_ctx_set_log_callback(zuptsdk_ctx_t *ctx,
                                  zuptsdk_log_fn fn,
@@ -322,9 +327,9 @@ int zuptsdk_options_set_solid(zuptsdk_options_t *opts, int enabled);
 int zuptsdk_options_set_block_size(zuptsdk_options_t *opts, size_t bytes);
 
 /**
- * Maximum decompressed output size. Decompression aborts with
- * ZUPTSDK_ERR_TOO_LARGE if exceeded. 0 == unlimited (NOT recommended
- * for untrusted input — zip-bomb attack vector). Default: 16 GiB.
+ * Compatibility setter retained for the existing ABI. Extraction APIs do not
+ * receive an options object, so this value is not their safety limit. Use
+ * zuptsdk_ctx_set_max_decompressed() on the extraction context instead.
  */
 int zuptsdk_options_set_max_decompressed(zuptsdk_options_t *opts,
                                          uint64_t max_bytes);
@@ -488,9 +493,9 @@ int zuptsdk_extract_buffer(zuptsdk_ctx_t *ctx,
  * ════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Compress from a read callback to a write callback. Streaming version
- * with no archive size limit — suitable for piping to network sockets,
- * encrypted volumes, or any backend with a write_fn.
+ * Compress from a read callback to a write callback. This prerelease stages
+ * data through private temporary files; it is a callback interface, not a
+ * constant-memory streaming implementation.
  *
  * @param input        [in] read callback supplying source bytes
  * @param input_ud     [in] userdata passed to read callback
@@ -522,8 +527,8 @@ int zuptsdk_decompress_stream(zuptsdk_ctx_t *ctx,
  * ════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Verify all block checksums and (if encrypted) HMAC of an archive.
- * No data is written to disk. Returns ZUPTSDK_OK if every block validates.
+ * Verify all block checksums and, when encrypted, authentication data. The
+ * archive is staged in a private temporary file but no payload is extracted.
  */
 int zuptsdk_verify(zuptsdk_ctx_t *ctx,
                    const uint8_t *archive, size_t archive_sz,

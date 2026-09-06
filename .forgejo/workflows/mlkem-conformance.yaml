@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
-# BLOCKING conformance gate for ML-KEM-768 (FIPS 203).
-# The 0/60-ACVP defect class cannot recur once this job is red-on-fail.
-# Acceptance: ACVP 80/80 (keyGen+encaps+decaps+encap/decap KeyCheck) AND both
-# differentials byte-equal in both directions AND the constant-time gate clean.
+# CI conformance checks for ML-KEM-768 (FIPS 203). Configure these jobs as
+# required checks in the forge settings when they must block merges.
 name: mlkem-conformance
 on: [push, pull_request]
 jobs:

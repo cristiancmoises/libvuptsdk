@@ -13,7 +13,7 @@
 #include "zupt.h"
 #include "zupt_acsl.h"
 #include "zupt_jasmin.h"
-#include "zupt_cpuid.h"  /* JASMIN-VERIFIED: AES-NI dispatch */
+#include "zupt_cpuid.h"  /* optional AES-NI assembly dispatch */
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -197,7 +197,7 @@ void zupt_aes256_ctr(const uint8_t key[32], const uint8_t nonce[16],
     memcpy(counter, nonce, 16);
 
 #ifdef ZUPT_USE_JASMIN
-    /* JASMIN-VERIFIED: AES-NI path — constant-time, no T-table leakage.
+    /* Optional AES-NI assembly path without the C fallback's T-table lookups.
      * The Jasmin-generated assembly uses VEX-encoded instructions (vaesenc,
      * vmovdqu, vpxor, etc.) which require BOTH AES-NI AND AVX support.
      * Checking only has_aesni would SIGILL on CPUs with AES-NI but no AVX,
