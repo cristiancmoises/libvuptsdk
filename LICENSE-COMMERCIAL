@@ -18,4 +18,9 @@ The option covers only rights owned or controlled by its licensor. It does not
 relicense dependencies, generated conformance vectors, prebuilt artifacts,
 vendored or copied code, or separately noticed material.
 
+In particular, the embedded VaptVupt codec files carrying
+`GPL-3.0-or-later` are outside this commercial-option notice. Their public
+terms and complete license text are recorded in their SPDX identifiers,
+NOTICE, and LICENSE-GPL-3.0.
+
 Commercial licensing inquiries: sac@securityops.co

@@ -7,17 +7,18 @@
 #
 #  Two libraries are shipped:
 #
-#  1. libvuptsdk-base.so.2.0.0  (built from source in this repo)
+#  1. libvuptsdk-base.so.2.0.3  (built from source in this repo)
 #     The compress/extract/archive/options API. ZUPTSDK_1.0 ABI subset.
 #
-#  2. libvuptsdk.so.2.0.0       (prebuilt, in prebuilt/)
+#  2. libvuptsdk.so.2.0.3       (prebuilt, in prebuilt/)
 #     The full ZUPTSDK_1.0 + ZUPTSDK_2.1 ABI including the easy_*
 #     convenience layer, password mode, streaming AEAD, and metrics.
 #     Some functions in this binary do not have source available in
 #     this repo (legacy reasons; see SECURITY.md). Audited as a binary.
 #
-#  Downstream applications should link against the canonical prebuilt
-#  for full functionality. See README.md for details.
+#  The canonical prebuilt is frozen and does not contain source updates in
+#  this tree. It is retained for compatibility testing, not rebuilt here.
+#  See README.md and SECURITY.md before selecting an artifact.
 # ─────────────────────────────────────────────────────────────────────
 
 SDK_VERSION_MAJOR = 2
@@ -25,6 +26,7 @@ SDK_VERSION_MINOR = 0
 SDK_VERSION_PATCH = 3
 SDK_SOVERSION     = $(SDK_VERSION_MAJOR)
 SDK_FULLVERSION   = $(SDK_VERSION_MAJOR).$(SDK_VERSION_MINOR).$(SDK_VERSION_PATCH)
+CODEC_VERSION     = 2.65.11
 
 PREFIX     ?= /usr/local
 LIBDIR     ?= $(PREFIX)/lib
@@ -57,11 +59,13 @@ LIBS      = -lpthread -lm
 
 ARCH := $(shell $(CC) -dumpmachine | cut -d- -f1)
 ifeq ($(ARCH),x86_64)
-  VV_SIMD_FLAGS = -msse2 -msse4.1 -mavx2
+  # Keep the default artifact usable on baseline x86-64. Setting
+  # VV_SIMD_FLAGS=-mavx2 is an explicit whole-codec portability trade-off.
+  VV_SIMD_FLAGS ?= -msse2
 else ifneq ($(filter aarch64 arm64,$(ARCH)),)
-  VV_SIMD_FLAGS = -march=armv8-a+simd
+  VV_SIMD_FLAGS ?= -march=armv8-a+simd
 else
-  VV_SIMD_FLAGS =
+  VV_SIMD_FLAGS ?=
 endif
 
 ZUPT_SOURCES = src/zupt_format.c src/zupt_lz.c src/zupt_lzh.c \
@@ -73,8 +77,10 @@ ZUPT_SOURCES = src/zupt_format.c src/zupt_lz.c src/zupt_lzh.c \
                src/zupt_dedup.c
 
 VV_SOURCES   = src/vv_encoder.c src/vv_decoder.c src/vv_ans.c \
-               src/vv_huffman.c src/vv_simd.c src/vv_xxh64.c \
+               src/vv_huffman.c src/vv_simd.c src/vv_xxh64.c src/vv_bcj.c \
                src/vaptvupt_api.c
+VV_HEADERS   = include/vaptvupt.h include/vaptvupt_api.h include/vv_ans.h \
+               include/vv_huffman.h include/vv_platform.h include/vv_bcj.h
 
 SDK_SOURCE   = src/zuptsdk.c
 
@@ -90,6 +96,7 @@ PREBUILT_LIB  = prebuilt/libvuptsdk.so.$(SDK_FULLVERSION)
 STAGED_LIB    = $(BUILD_DIR)/libvuptsdk.so.$(SDK_FULLVERSION)
 PKGCONFIG     = $(BUILD_DIR)/vuptsdk.pc
 LINKER_MAP    = zuptsdk.map
+CODEC_TEST    = $(BUILD_DIR)/codec_integration_test
 
 # ── Version query (single source of truth for packaging scripts) ────
 .PHONY: printversion
@@ -104,18 +111,23 @@ all: $(SOURCE_LIB) $(SOURCE_STATIC) $(STAGED_LIB) $(PKGCONFIG)
 	@echo "  │  libvuptsdk $(SDK_FULLVERSION) — build complete                   │"
 	@echo "  │                                                      │"
 	@echo "  │  Source-built: build/libvuptsdk-base.so (subset)     │"
-	@echo "  │  Canonical:    build/libvuptsdk.so      (full)       │"
+	@echo "  │  Frozen:       build/libvuptsdk.so      (full)       │"
 	@echo "  │                                                      │"
 	@echo "  │  'make test'    — smoke test + symbol audit          │"
-	@echo "  │  'make install' — install canonical to PREFIX        │"
+	@echo "  │  'make install' — install frozen full prebuilt       │"
 	@echo "  ╰──────────────────────────────────────────────────────╯"
+	@echo "  NOTE: the frozen full library does not contain codec 2.65.11."
+
+.PHONY: base
+base: $(SOURCE_LIB) $(SOURCE_STATIC) $(PKGCONFIG)
+	@echo "Built the source-based ABI subset with VaptVupt codec 2.65.11."
 
 # ── Compile rules ───────────────────────────────────────────────────
-$(BUILD_DIR)/vv_%.o: src/vv_%.c | $(BUILD_DIR)
+$(BUILD_DIR)/vv_%.o: src/vv_%.c $(VV_HEADERS) | $(BUILD_DIR)
 	$(Q)echo "  CC  $<"
 	$(Q)$(CC) $(CFLAGS) $(PIC_FLAGS) $(VV_SIMD_FLAGS) -Iinclude -Isrc -c $< -o $@
 
-$(BUILD_DIR)/vaptvupt_api.o: src/vaptvupt_api.c | $(BUILD_DIR)
+$(BUILD_DIR)/vaptvupt_api.o: src/vaptvupt_api.c $(VV_HEADERS) | $(BUILD_DIR)
 	$(Q)echo "  CC  $<"
 	$(Q)$(CC) $(CFLAGS) $(PIC_FLAGS) $(VV_SIMD_FLAGS) -Iinclude -Isrc -c $< -o $@
 
@@ -147,7 +159,7 @@ $(SOURCE_STATIC): $(PIC_OBJS)
 
 # ── Stage canonical prebuilt ────────────────────────────────────────
 $(STAGED_LIB): $(PREBUILT_LIB) | $(BUILD_DIR)
-	$(Q)echo "  CP  $@  [canonical prebuilt]"
+	$(Q)echo "  CP  $@  [frozen prebuilt; source changes not included]"
 	$(Q)cp $(PREBUILT_LIB) $@
 	$(Q)cd $(BUILD_DIR) && ln -sf libvuptsdk.so.$(SDK_FULLVERSION) libvuptsdk.so.$(SDK_SOVERSION)
 	$(Q)cd $(BUILD_DIR) && ln -sf libvuptsdk.so.$(SDK_SOVERSION)   libvuptsdk.so
@@ -161,8 +173,28 @@ $(PKGCONFIG): | $(BUILD_DIR)
 	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(INCLUDEDIR)\n\nName: vuptsdk\nDescription: libvuptsdk - post-quantum hybrid cryptography\nVersion: $(SDK_FULLVERSION)\nLibs: -L$${libdir} -lvuptsdk\nCflags: -I$${includedir}\n' > $@
 
 # ── Tests ───────────────────────────────────────────────────────────
+$(CODEC_TEST): tests/codec_integration_test.c $(SOURCE_STATIC)
+	$(Q)echo "  CC  tests/codec_integration_test"
+	$(Q)$(CC) $(CFLAGS) $(VV_SIMD_FLAGS) -Iinclude -Isrc $< \
+		$(SOURCE_STATIC) -o $@ $(LDFLAGS) $(LIBS)
+
+$(BUILD_DIR)/source_smoke: tests/source_smoke.c $(SOURCE_LIB)
+	$(Q)echo "  CC  tests/source_smoke"
+	$(Q)$(CC) $(CFLAGS) -Iinclude $< $(SOURCE_LIB) \
+		-o $@ $(LDFLAGS) $(LIBS)
+
+.PHONY: test-source
+test-source: $(BUILD_DIR)/source_smoke $(CODEC_TEST)
+	$(Q)echo "═══ libvuptsdk source-only smoke test ═══"
+	$(Q)LD_LIBRARY_PATH=$(BUILD_DIR) $(BUILD_DIR)/source_smoke
+	$(Q)echo ""
+	$(Q)echo "═══ embedded VaptVupt codec integration ═══"
+	$(Q)$(CODEC_TEST)
+	$(Q)echo ""
+	$(Q)$(MAKE) audit-licenses
+
 .PHONY: test
-test: $(STAGED_LIB) $(SOURCE_LIB)
+test: $(STAGED_LIB) $(SOURCE_LIB) $(CODEC_TEST)
 	$(Q)echo "  CC  tests/smoke_test"
 	$(Q)$(CC) $(CFLAGS) -Iinclude tests/smoke_test.c \
 		$(STAGED_LIB) $(SOURCE_LIB) \
@@ -170,6 +202,9 @@ test: $(STAGED_LIB) $(SOURCE_LIB)
 	$(Q)echo ""
 	$(Q)echo "═══ libvuptsdk smoke test ═══"
 	$(Q)LD_LIBRARY_PATH=$(BUILD_DIR) $(BUILD_DIR)/smoke_test
+	$(Q)echo ""
+	$(Q)echo "═══ embedded VaptVupt codec integration ═══"
+	$(Q)$(CODEC_TEST)
 	$(Q)echo ""
 	$(Q)$(MAKE) audit
 	$(Q)echo ""
@@ -183,7 +218,7 @@ audit: $(SOURCE_LIB) $(PREBUILT_LIB)
 .PHONY: test-asan
 test-asan:
 	$(Q)$(MAKE) clean
-	$(Q)$(MAKE) $(SOURCE_LIB) \
+	$(Q)$(MAKE) $(SOURCE_LIB) $(SOURCE_STATIC) \
 	  CFLAGS="$(CSTD) $(WARN) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -DZUPT_BUILDING_SDK=1" \
 	  LDFLAGS="-fsanitize=address,undefined" \
 	  Q=@
@@ -194,6 +229,14 @@ test-asan:
 	$(Q)echo ""
 	$(Q)echo "═══ libvuptsdk source ASAN/UBSAN smoke test ═══"
 	$(Q)ASAN_OPTIONS=detect_leaks=0 LD_LIBRARY_PATH=$(BUILD_DIR) $(BUILD_DIR)/source_smoke_asan
+	$(Q)echo ""
+	$(Q)echo "═══ embedded VaptVupt codec ASAN/UBSAN test ═══"
+	$(Q)$(CC) -std=c11 -Wall -Wextra -Wpedantic -O1 -g \
+	   -fsanitize=address,undefined -fno-omit-frame-pointer \
+	   $(VV_SIMD_FLAGS) -Iinclude -Isrc tests/codec_integration_test.c \
+	   $(SOURCE_STATIC) -o $(BUILD_DIR)/codec_integration_test_asan \
+	   -fsanitize=address,undefined -lpthread -lm
+	$(Q)ASAN_OPTIONS=detect_leaks=0 $(BUILD_DIR)/codec_integration_test_asan
 	@echo ""
 	@echo "ASAN build + test complete"
 
@@ -235,7 +278,8 @@ uninstall:
 	rm -f $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk.pc
 
 # ── License audit ───────────────────────────────────────────────────
-# Verifies every source file carries SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial.
+# Verifies first-party SDK files use the project dual-license identifier and
+# the embedded VaptVupt core retains its upstream GPL-3.0-or-later identifier.
 # Useful as a pre-commit hook.
 # ── Formal audit (full battery) ─────────────────────────────────────
 # Runs every verification phase in this audit:
@@ -279,13 +323,22 @@ audit-licenses:
 	             -o -name '*.map' \) \
 	             -not -path './build/*' -not -path './dist/*' \
 	             -not -path './prebuilt/*' -not -path './.git/*'); do \
-	    if ! grep -q "SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial" "$$f"; then \
-	        echo "  ✗ $$f (missing or wrong SPDX)"; \
+	    case "$$f" in \
+	      ./src/vv_*.c|./src/vaptvupt_api.c|./include/vv_*.h|\
+	      ./include/vaptvupt.h|./include/vaptvupt_api.h) \
+	        EXPECTED='GPL-3.0-or-later' ;; \
+	      ./tests/codec_integration_test.c) \
+	        EXPECTED='AGPL-3.0-or-later' ;; \
+	      *) \
+	        EXPECTED='AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial' ;; \
+	    esac; \
+	    if ! grep -Eq "SPDX-License-Identifier: $$EXPECTED([[:space:]]|\\*/)*$$" "$$f"; then \
+	        echo "  ✗ $$f (expected $$EXPECTED)"; \
 	        MISSING=$$((MISSING+1)); \
 	    fi; \
 	done; \
 	if [ $$MISSING -eq 0 ]; then \
-	    echo "  ✓ All source files carry SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial"; \
+	    echo "  ✓ SDK and embedded codec SPDX scopes are consistent"; \
 	else \
 	    echo ""; \
 	    echo "  $$MISSING files need a SPDX license header. Aborting."; \
@@ -369,7 +422,7 @@ audit-all:
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo "  Phase 5/5: Full audit complete"
-	@echo "  smoke + ASAN + license + hardening + fuzz — all green"
+	@echo "  Checks completed; inspect each phase and recorded warnings"
 	@echo "═══════════════════════════════════════════════════════════"
 
 # ── Clean ───────────────────────────────────────────────────────────
@@ -379,26 +432,33 @@ clean:
 	$(Q)find . -name '*.o' -not -path './prebuilt/*' -delete
 
 # ── Distribution tarball ────────────────────────────────────────────
-DIST_NAME = libvuptsdk-$(SDK_FULLVERSION)
+# This tree changes source beneath an already-released SDK version. Keep the
+# candidate unmistakably source-only and unreleased until a legitimate SDK
+# version can be built and audited across the complete ABI.
+DIST_NAME = libvuptsdk-$(SDK_FULLVERSION)-codec-$(CODEC_VERSION)-unreleased-source
+SOURCE_DATE_EPOCH = 1788652800
 
 .PHONY: dist
 dist:
-	$(Q)mkdir -p dist
-	$(Q)rm -rf /tmp/$(DIST_NAME)
-	$(Q)mkdir -p /tmp/$(DIST_NAME)
-	$(Q)cp -r include src tests doc bindings jasmin packaging prebuilt tools bench \
-	         Makefile zuptsdk.map \
-	         README.md CHANGELOG.md LICENSE SECURITY.md AUDIT.md BENCHMARKS.md \
-	         /tmp/$(DIST_NAME)/ 2>/dev/null
-	$(Q)[ -d .github ] && cp -r .github /tmp/$(DIST_NAME)/ 2>/dev/null || true
-	$(Q)find /tmp/$(DIST_NAME) -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
-	$(Q)find /tmp/$(DIST_NAME) -name '*.pyc' -delete 2>/dev/null || true
-	$(Q)find /tmp/$(DIST_NAME) -name '*.o' -delete 2>/dev/null || true
-	$(Q)cd /tmp && tar --sort=name \
-	                   --mtime='2026-04-29 00:00:00 UTC' \
-	                   --owner=0 --group=0 --numeric-owner \
-	                   -czf $(CURDIR)/dist/$(DIST_NAME).tar.gz $(DIST_NAME)
-	$(Q)rm -rf /tmp/$(DIST_NAME)
+	$(Q)set -eu; \
+	  tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/libvuptsdk-dist.XXXXXXXX"); \
+	  trap 'rm -rf -- "$$tmp"' EXIT HUP INT TERM; \
+	  root="$$tmp/$(DIST_NAME)"; \
+	  mkdir -p dist "$$root"; \
+	  cp -r include src tests doc bindings jasmin packaging tools bench \
+	        conformance-suite \
+	        Makefile zuptsdk.map \
+	        README.md README.pt-BR.md CHANGELOG.md SECURITY.md AUDIT.md BENCHMARKS.md \
+	        LICENSE LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL NOTICE \
+	        "$$root/"; \
+	  if [ -d .forgejo ]; then cp -r .forgejo "$$root/"; fi; \
+	  if [ -d .github ]; then cp -r .github "$$root/"; fi; \
+	  find "$$root" -name '__pycache__' -type d -exec rm -rf -- {} +; \
+	  find "$$root" -type f \( -name '*.pyc' -o -name '*.o' \) -delete; \
+	  tar -C "$$tmp" --sort=name \
+	      --mtime="@$(SOURCE_DATE_EPOCH)" \
+	      --owner=0 --group=0 --numeric-owner \
+	      -czf "$(CURDIR)/dist/$(DIST_NAME).tar.gz" "$(DIST_NAME)"
 	@echo "Built: dist/$(DIST_NAME).tar.gz"
 	@cd dist && sha256sum $(DIST_NAME).tar.gz
 
@@ -406,18 +466,19 @@ dist:
 .PHONY: help
 help:
 	@echo "libvuptsdk $(SDK_FULLVERSION) — build targets:"
-	@echo "  make             Build from-source + stage canonical prebuilt"
+	@echo "  make             Build source subset + stage frozen full prebuilt"
+	@echo "  make base        Build only the current source-based ABI subset"
 	@echo "  make test        Compile + run smoke test, then audit"
+	@echo "  make test-source Test only artifacts built from current source"
 	@echo "  make audit       Verify source build is a subset of canonical"
-	@echo "  make audit-licenses  Verify all files have AGPL SPDX header"
+	@echo "  make audit-licenses  Verify SDK and codec SPDX scopes"
 	@echo "  make audit-hardening Verify ELF hardening (RELRO, NX, etc.)"
 	@echo "  make audit-fuzz      Run adversarial fuzz suite (~1 min)"
 	@echo "  make audit-all       Run everything: smoke + ASAN + license + hardening + fuzz"
 	@echo "  make bench           Performance benchmark (~1 min)"
-	@echo "  make audit-fuzz  Run adversarial tamper + wrong-key fuzzers"
 	@echo "  make formal-audit  Run the full audit battery (test+ASAN+fuzz)"
 	@echo "  make test-asan   Build from-source with ASAN/UBSAN"
-	@echo "  make install     Install canonical + headers + pkg-config"
+	@echo "  make install     Install frozen full prebuilt + headers + pkg-config"
 	@echo "  make uninstall   Remove installed files"
-	@echo "  make dist        Build source tarball"
+	@echo "  make dist        Build an unreleased source-only tarball"
 	@echo "  make clean       Remove build artifacts"

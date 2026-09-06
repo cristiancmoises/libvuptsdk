@@ -95,10 +95,15 @@ static void worker_compress(zpar_slot_t *slot, const zupt_keyring_t *kr) {
     else if (codec == ZUPT_CODEC_VAPTVUPT) {
         vv_options_t vv_opts;
         vv_default_options(&vv_opts);
-        if (level <= 3) vv_opts.mode = VV_MODE_ULTRA_FAST;
+        if (level <= 2) vv_opts.mode = VV_MODE_ULTRA_FAST;
         else if (level <= 7) vv_opts.mode = VV_MODE_BALANCED;
         else vv_opts.mode = VV_MODE_EXTREME;
+        /* Match the serial vvz wrapper's on-disk policy. The archive carries
+         * its own block checksum, and output must stay in the conservative
+         * decoder-compatible subset regardless of thread count. */
         vv_opts.checksum = 0;
+        vv_opts.compat_v246_5_decoder = 1;
+        vv_opts.format_v2 = 0;
         vv_opts.window_log = (nread > (1u << 16)) ? 20 : 16;
 
         size_t vv_cap = vv_compress_bound(nread);

@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * VaptVupt — Canonical Huffman Codec Implementation
  *
@@ -39,10 +39,12 @@ typedef struct {
     uint8_t *dst;
     size_t   pos;
     size_t   cap;
+    int      overflow;
 } bw_t;
 
 static inline void bw_init(bw_t *w, uint8_t *dst, size_t cap) {
     w->bits = 0; w->nbits = 0; w->dst = dst; w->pos = 0; w->cap = cap;
+    w->overflow = 0;
 }
 
 /* Add up to 16 bits. Flushes full bytes automatically. */
@@ -50,7 +52,16 @@ static inline void bw_add(bw_t *w, uint32_t val, int n) {
     w->bits |= (uint64_t)(val & ((1u << n) - 1)) << w->nbits;
     w->nbits += n;
     /* Flush complete bytes */
-    while (w->nbits >= 8 && w->pos < w->cap) {
+    while (w->nbits >= 8) {
+        if (w->pos == w->cap) {
+            /* Keep the accumulator bounded after capacity exhaustion;
+             * later symbols must never shift by 64 or more. Flush
+             * reports the sticky error to the encoder. */
+            w->overflow = 1;
+            w->bits = 0;
+            w->nbits = 0;
+            return;
+        }
         w->dst[w->pos++] = (uint8_t)(w->bits);
         w->bits >>= 8;
         w->nbits -= 8;
@@ -58,12 +69,13 @@ static inline void bw_add(bw_t *w, uint32_t val, int n) {
 }
 
 static inline size_t bw_flush(bw_t *w) {
+    if (w->overflow) return SIZE_MAX;
     while (w->nbits > 0 && w->pos < w->cap) {
         w->dst[w->pos++] = (uint8_t)(w->bits);
         w->bits >>= 8;
         w->nbits -= 8;
     }
-    return w->pos;
+    return w->nbits > 0 ? SIZE_MAX : w->pos;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -85,8 +97,23 @@ static inline void br_init(br_t *r, const uint8_t *src, size_t len) {
     r->bits = 0; r->nbits = 0; r->src = src; r->pos = 0; r->len = len;
 }
 
-/* Refill: load bytes until accumulator is full (≥56 bits) */
+/* Refill: load bytes until accumulator is full (≥56 bits).
+ * SPRINT 124: bulk 8-byte fast path. The byte-at-a-time loop was up
+ * to 7 dependent load-shift-or iterations firing every 3-4 symbols
+ * per stream — measured as the top cost of Huffman literal decode.
+ * One unaligned 8-byte load + mask absorbs the same bytes; the tail
+ * (<8 bytes left) keeps the exact byte loop. */
 static inline void br_refill(br_t *r) {
+    if (r->pos + 8 <= r->len) {
+        unsigned absorbed = (63u - (unsigned)r->nbits) >> 3;   /* 0..7 */
+        uint64_t chunk;
+        memcpy(&chunk, r->src + r->pos, 8);
+        chunk &= ((uint64_t)1 << (absorbed * 8)) - 1;
+        r->bits |= chunk << r->nbits;
+        r->pos += absorbed;
+        r->nbits += (int)(absorbed * 8);
+        return;
+    }
     while (r->nbits <= 56 && r->pos < r->len) {
         r->bits |= (uint64_t)r->src[r->pos++] << r->nbits;
         r->nbits += 8;
@@ -450,6 +477,7 @@ vvh_error_t vvh_encode(const uint8_t *src, size_t src_len,
     }
 
     size_t bs_sz = bw_flush(&w);
+    if (bs_sz == SIZE_MAX) return VVH_ERR_OVERFLOW;
     size_t total = hdr_sz + bs_sz;
 
     /* Incompressible guard: if not smaller, signal failure */
@@ -540,6 +568,7 @@ vvh_error_t vvh_encode4(const uint8_t *src, size_t src_len,
         }
 
         size_t sz = bw_flush(&w);
+        if (sz == SIZE_MAX) return VVH_ERR_OVERFLOW;
         stream_sizes[s] = sz;
         cur_off += sz;
     }
@@ -583,9 +612,14 @@ vvh_error_t vvh_encode4(const uint8_t *src, size_t src_len,
  *   Linear scan of slow_code/slow_len/slow_sym arrays.
  * ═══════════════════════════════════════════════════════════════ */
 
-vvh_error_t vvh_decode(const uint8_t *src, size_t src_len,
+static void release_decode_table(vvh_dec_table_t *dec, const void *workspace) {
+    if (!workspace) free(dec);
+}
+
+static vvh_error_t vvh_decode_impl(const uint8_t *src, size_t src_len,
                        uint8_t *dst, size_t dst_cap,
-                       size_t num_literals, size_t *src_consumed) {
+                       size_t num_literals, size_t *src_consumed,
+                       vvh_dec_table_t *workspace) {
     if (num_literals == 0) {
         *src_consumed = 0;
         return VVH_OK;
@@ -603,8 +637,9 @@ vvh_error_t vvh_decode(const uint8_t *src, size_t src_len,
         if (lengths[i] > 0) { has_sym = 1; break; }
     if (!has_sym) return VVH_ERR_CORRUPT;
 
-    /* Build decode table (heap-allocated: 16 KB) */
-    vvh_dec_table_t *dec = (vvh_dec_table_t *)malloc(sizeof(vvh_dec_table_t));
+    /* Caller-owned table storage avoids a per-block allocation. */
+    vvh_dec_table_t *dec = workspace ? workspace :
+        (vvh_dec_table_t *)malloc(sizeof(vvh_dec_table_t));
     if (!dec) return VVH_ERR_NOMEM;
     build_dec_table(lengths, dec);
 
@@ -626,6 +661,7 @@ vvh_error_t vvh_decode(const uint8_t *src, size_t src_len,
 
         if (VV_LIKELY(len > 0)) {
             /* Fast path: code ≤ 12 bits */
+            if (r.nbits < len) { release_decode_table(dec, workspace); return VVH_ERR_CORRUPT; }
             br_consume(&r, len);
             dst[i] = (uint8_t)sym;
         } else {
@@ -634,7 +670,8 @@ vvh_error_t vvh_decode(const uint8_t *src, size_t src_len,
             for (int s = 0; s < dec->slow_count; s++) {
                 int slen = dec->slow_len[s];
                 uint32_t mask = (1u << slen) - 1;
-                if ((br_peek(&r, slen) & mask) == dec->slow_code[s]) {
+                if (r.nbits >= slen &&
+                    (br_peek(&r, slen) & mask) == dec->slow_code[s]) {
                     br_consume(&r, slen);
                     dst[i] = dec->slow_sym[s];
                     found = 1;
@@ -642,7 +679,7 @@ vvh_error_t vvh_decode(const uint8_t *src, size_t src_len,
                 }
             }
             if (!found) {
-                free(dec);
+                release_decode_table(dec, workspace);
                 return VVH_ERR_CORRUPT;
             }
         }
@@ -658,7 +695,7 @@ vvh_error_t vvh_decode(const uint8_t *src, size_t src_len,
             *src_consumed -= over;
     }
 
-    free(dec);
+    release_decode_table(dec, workspace);
     return VVH_OK;
 }
 
@@ -679,9 +716,10 @@ vvh_error_t vvh_decode(const uint8_t *src, size_t src_len,
  * table built from the code-length header.
  * ═══════════════════════════════════════════════════════════════ */
 
-vvh_error_t vvh_decode4(const uint8_t *src, size_t src_len,
+static vvh_error_t vvh_decode4_impl(const uint8_t *src, size_t src_len,
                         uint8_t *dst, size_t dst_cap,
-                        size_t num_literals, size_t *src_consumed) {
+                        size_t num_literals, size_t *src_consumed,
+                        vvh_dec_table_t *workspace) {
     if (num_literals == 0) {
         *src_consumed = 0;
         return VVH_OK;
@@ -721,7 +759,8 @@ vvh_error_t vvh_decode4(const uint8_t *src, size_t src_len,
     }
 
     /* ─── 4. Build decode table (shared across all 4 streams) ─── */
-    vvh_dec_table_t *dec = (vvh_dec_table_t *)malloc(sizeof(vvh_dec_table_t));
+    vvh_dec_table_t *dec = workspace ? workspace :
+        (vvh_dec_table_t *)malloc(sizeof(vvh_dec_table_t));
     if (!dec) return VVH_ERR_NOMEM;
     build_dec_table(lengths, dec);
 
@@ -749,6 +788,34 @@ vvh_error_t vvh_decode4(const uint8_t *src, size_t src_len,
         int sym = (int)(entry & 0xFF); \
         int len = (int)((entry >> 8) & 0xF); \
         if (VV_LIKELY(len > 0)) { \
+            if ((R).nbits < len) { release_decode_table(dec, workspace); return VVH_ERR_CORRUPT; } \
+            br_consume(&(R), len); \
+            (OUT) = (uint8_t)sym; \
+        } else { \
+            int found = 0; \
+            for (int s = 0; s < dec->slow_count; s++) { \
+                int slen = dec->slow_len[s]; \
+                uint32_t mask = (1u << slen) - 1; \
+                if ((R).nbits >= slen && \
+                    (br_peek(&(R), slen) & mask) == dec->slow_code[s]) { \
+                    br_consume(&(R), slen); \
+                    (OUT) = dec->slow_sym[s]; \
+                    found = 1; \
+                    break; \
+                } \
+            } \
+            if (!found) { release_decode_table(dec, workspace); return VVH_ERR_CORRUPT; } \
+        } \
+    } while (0)
+
+    /* Variant without the per-symbol refill check, for rounds where a
+     * bulk refill has already guaranteed enough bits (see below). */
+    #define DEC_ONE_NR(R, OUT) do { \
+        uint32_t peek = br_peek(&(R), VVH_DECODE_BITS); \
+        uint32_t entry = dec->table[peek]; \
+        int sym = (int)(entry & 0xFF); \
+        int len = (int)((entry >> 8) & 0xF); \
+        if (VV_LIKELY(len > 0)) { \
             br_consume(&(R), len); \
             (OUT) = (uint8_t)sym; \
         } else { \
@@ -763,7 +830,7 @@ vvh_error_t vvh_decode4(const uint8_t *src, size_t src_len,
                     break; \
                 } \
             } \
-            if (!found) { free(dec); return VVH_ERR_CORRUPT; } \
+            if (!found) { release_decode_table(dec, workspace); return VVH_ERR_CORRUPT; } \
         } \
     } while (0)
 
@@ -771,9 +838,39 @@ vvh_error_t vvh_decode4(const uint8_t *src, size_t src_len,
     /* Each iteration's 4 decodes are fully independent — different
      * readers, different table peeks, different output positions.
      * Modern OoO engines can pipeline 4 independent decode chains
-     * achieving ~1.8-2.2× speedup over single-stream. */
+     * achieving ~1.8-2.2× speedup over single-stream.
+     *
+     * SPRINT 127: refill-hoisted fast rounds. One bulk refill per lane
+     * guarantees >= 56 accumulator bits (its 8-byte fast path applies
+     * whenever pos + 8 <= len, which the loop guard checks per lane),
+     * and three symbols consume at most 3 x VVH_MAX_CODE_LEN = 45 bits
+     * — so each round decodes 3 symbols per lane (12 outputs) with a
+     * single refill branch per lane instead of one per symbol. Bit
+     * consumption and decode order are identical to the per-symbol
+     * loop; corrupt input still bottoms out at the same slow-path
+     * check, and nbits cannot underflow (56 - 45 >= 0). The tail and
+     * the last rounds fall back to the checked DEC_ONE loop. */
     size_t out_idx = 0;
-    for (size_t i = 0; i < Q; i++) {
+    size_t i = 0;
+    while (i + 3 <= Q &&
+           r0.pos + 8 <= r0.len && r1.pos + 8 <= r1.len &&
+           r2.pos + 8 <= r2.len && r3.pos + 8 <= r3.len) {
+        br_refill(&r0); br_refill(&r1); br_refill(&r2); br_refill(&r3);
+        for (int k = 0; k < 3; k++) {
+            uint8_t y0, y1, y2, y3;
+            DEC_ONE_NR(r0, y0);
+            DEC_ONE_NR(r1, y1);
+            DEC_ONE_NR(r2, y2);
+            DEC_ONE_NR(r3, y3);
+            dst[out_idx + 0] = y0;
+            dst[out_idx + 1] = y1;
+            dst[out_idx + 2] = y2;
+            dst[out_idx + 3] = y3;
+            out_idx += 4;
+        }
+        i += 3;
+    }
+    for (; i < Q; i++) {
         uint8_t y0, y1, y2, y3;
         DEC_ONE(r0, y0);
         DEC_ONE(r1, y1);
@@ -793,10 +890,68 @@ vvh_error_t vvh_decode4(const uint8_t *src, size_t src_len,
     if (tail >= 3) { uint8_t y; DEC_ONE(r2, y); dst[out_idx++] = y; }
 
     #undef DEC_ONE
+    #undef DEC_ONE_NR
 
     /* Total bytes consumed: header + stream-size header + all 4 streams */
     *src_consumed = streams_off + s0 + s1 + s2 + s3;
 
-    free(dec);
+    release_decode_table(dec, workspace);
     return VVH_OK;
+}
+
+size_t vvh_decode_workspace_size(void) {
+    return sizeof(vvh_dec_table_t);
+}
+
+size_t vvh_decode_workspace_alignment(void) {
+    return _Alignof(vvh_dec_table_t);
+}
+
+static vvh_error_t check_decode_workspace(void *workspace, size_t cap) {
+    if (!workspace || (uintptr_t)workspace % _Alignof(vvh_dec_table_t))
+        return VVH_ERR_PARAM;
+    if (cap < sizeof(vvh_dec_table_t)) return VVH_ERR_OVERFLOW;
+    return VVH_OK;
+}
+
+vvh_error_t vvh_decode(const uint8_t *src, size_t src_len,
+                       uint8_t *dst, size_t dst_cap,
+                       size_t num_literals, size_t *src_consumed) {
+    return vvh_decode_impl(src, src_len, dst, dst_cap, num_literals,
+                           src_consumed, NULL);
+}
+
+vvh_error_t vvh_decode4(const uint8_t *src, size_t src_len,
+                        uint8_t *dst, size_t dst_cap,
+                        size_t num_literals, size_t *src_consumed) {
+    return vvh_decode4_impl(src, src_len, dst, dst_cap, num_literals,
+                            src_consumed, NULL);
+}
+
+vvh_error_t vvh_decode_with_workspace(const uint8_t *src, size_t src_len,
+                                      uint8_t *dst, size_t dst_cap,
+                                      size_t num_literals, size_t *src_consumed,
+                                      void *workspace, size_t workspace_cap) {
+    if (!src_consumed || (!src && src_len) || (!dst && dst_cap)) return VVH_ERR_PARAM;
+    if (!num_literals) { *src_consumed = 0; return VVH_OK; }
+    if (!src || !dst) return VVH_ERR_PARAM;
+    if (num_literals > dst_cap) return VVH_ERR_OVERFLOW;
+    vvh_error_t err = check_decode_workspace(workspace, workspace_cap);
+    if (err != VVH_OK) return err;
+    return vvh_decode_impl(src, src_len, dst, dst_cap, num_literals,
+                           src_consumed, (vvh_dec_table_t *)workspace);
+}
+
+vvh_error_t vvh_decode4_with_workspace(const uint8_t *src, size_t src_len,
+                                       uint8_t *dst, size_t dst_cap,
+                                       size_t num_literals, size_t *src_consumed,
+                                       void *workspace, size_t workspace_cap) {
+    if (!src_consumed || (!src && src_len) || (!dst && dst_cap)) return VVH_ERR_PARAM;
+    if (!num_literals) { *src_consumed = 0; return VVH_OK; }
+    if (!src || !dst) return VVH_ERR_PARAM;
+    if (num_literals > dst_cap) return VVH_ERR_OVERFLOW;
+    vvh_error_t err = check_decode_workspace(workspace, workspace_cap);
+    if (err != VVH_OK) return err;
+    return vvh_decode4_impl(src, src_len, dst, dst_cap, num_literals,
+                            src_consumed, (vvh_dec_table_t *)workspace);
 }

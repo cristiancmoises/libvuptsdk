@@ -1,24 +1,31 @@
 # libvuptsdk audit report
 
-**Version**: 2.0.0
-**Date**: 2026-04-29
+**Version**: 2.0.3 (plus unreleased codec 2.65.11 integration)
+**Original audit date**: 2026-04-29
+
+**Current integration update**: 2026-09-06
 **Author**: Cristian Cezar Moisés <sac@securityops.co>
 **Methodology**: hard verification + adversarial testing
 
 This document records what has been verified about libvuptsdk and what
-remains as open items. It is updated on every release.
+remains as open items. It is updated when the evidence changes.
 
 ---
 
-## TL;DR — current verification state
+## TL;DR — verification inventory
+
+The source-build, codec, sanitizer, license, distribution, and GCC warning
+rows were rerun for the 2026-09-06 integration. Other dated cryptographic,
+fuzz, binding, cross-build, install, and full-prebuilt results are retained
+historical evidence and were not rerun by this codec update.
 
 | Aspect | Status | Evidence |
 |---|---|---|
-| Source build (subset) — buildable from this repo | ✓ | `make` produces `libvuptsdk-base.so.2.0.0`, 55 symbols |
-| Canonical prebuilt — production-deployed binary | ✓ | 68 symbols including `easy_*` v2.1 layer |
-| Smoke test (10 properties, real ciphertext) | ✓ 10/10 | `make test` |
-| Symbol audit (13 properties) | ✓ 13/13 | `make audit` |
-| ASAN/UBSAN smoke test, leak-detect ON | ✓ 6/6 | `make test-asan` |
+| Source build (subset) — buildable from this repo | ✓ | `make base` produces `libvuptsdk-base.so.2.0.3`, 55 public symbols |
+| Frozen full-ABI prebuilt | Historical artifact | 68 symbols including `easy_*` v2.1 layer; current source changes absent |
+| Frozen-prebuilt smoke and symbol audit | BLOCKED locally | `make test` cannot link here because `libargon2.so.1` and `libcrypto.so.3` are unavailable; prior results below are historical |
+| ASAN/UBSAN source smoke test | ✓ 6/6 | `make test-asan` |
+| Embedded VaptVupt 2.65.11 serial/parallel gate | ✓ 57/57 | `tests/codec_integration_test.c` |
 | ASAN stress (10× repeated runs, no flakes) | ✓ 10/10 | this audit |
 | Tamper fuzz, single-bit flip × 1000 | ✓ 1000/1000 detected | tools/tamper_fuzz |
 | Tamper fuzz, multi-byte × 10000 | ✓ 9991/10000 detected, 0 undetected | tools/tamper_fuzz_multi |
@@ -28,25 +35,26 @@ remains as open items. It is updated on every release.
 | **NEW Key-isolation test, 1293 secrets × 100 cts** | ✓ 0 leaks in 129,300 trials | tools/key_isolation |
 | **NEW Hardening audit (ELF properties)** | ✓ Source = Full RELRO; ⚠ Prebuilt = Partial RELRO | tools/checksec_lib.sh |
 | **NEW Performance benchmarks** | ✓ Reproducible | bench/bench_throughput |
-| License audit (every file = AGPL-3.0-or-later) | ✓ 64 files | `make audit-licenses` |
+| Per-file license audit (SDK and embedded codec scopes) | ✓ 96 files | `make audit-licenses` |
 | C++17 ABI compatibility | ✓ | All 9 public headers compile with g++ |
 | Cross-compile to AArch64 (arch detection) | ✓ | `$(CC) -dumpmachine` → NEON SIMD |
 | Hermetic dist tarball (deterministic SHA) | ✓ | `make dist` produces same SHA across runs |
 | `make install` end-to-end with custom PREFIX | ✓ | pkg-config respects install-time PREFIX |
 | **NEW `make install` strips debug info** | ✓ | 721 KiB → 151 KiB |
 | Python bindings test suite (13 properties) | ✓ 13/13 | `python3 tests/test_python.py` |
-| Compiler warnings (`-Wpedantic`) on source build | ✓ Zero | both GCC and tested |
+| Compiler warnings (`-Wpedantic`, `-Werror`) on current source build | ✓ Zero | GCC; Clang was unavailable in the recorded environment |
 | External independent crypto audit | ✗ Pending | budget required |
 | `zuptsdk_easy_*` source open-sourced | ✗ Pending | only binary audited |
 | **OPEN canonical prebuilt missing BIND_NOW (Partial RELRO)** | ⚠ Tracked | rebuild prebuilt with `-Wl,-z,now` |
 
-**Bottom line**: libvuptsdk 2.0.0 passes a comprehensive 22-phase internal
-verification including 192,800+ adversarial fuzz trials against the
-canonical binary, all green. **Side-channel timing variance is within 2%**
-of valid decrypts, **0 secret-key bytes leak into ciphertext**, and **0
-random byte strings out of 50,000 are false-accepted**. The remaining open
-items are budgetary (external audit), scoping (open-sourcing the easy_*
-source), and one defense-in-depth gap (BIND_NOW on the prebuilt).
+**Bottom line for this unreleased integration**: the source-built ABI subset,
+its 57-check codec gate, scoped license audit, GCC warning gate, and
+ASan/UBSan run pass. The frozen full-ABI binary does not contain these changes
+and its legacy smoke test is blocked in the recorded local environment by two
+missing runtime libraries. The broader cryptographic and fuzz results below
+belong to the earlier internal audit; they were not rerun by this codec sync
+and are not an independent audit. A complete release still requires the
+missing full-ABI source, a rebuilt artifact, target tests, and external review.
 
 ---
 
@@ -130,7 +138,7 @@ Wrong ACCEPTED:    0 <- must be 0
 **Hypothesis**: the from-source build is memory-safe across repeated
 invocations under the strictest sanitizer configuration.
 
-**Method**: Build `libvuptsdk-base.so.2.0.0` with
+**Method**: Build `libvuptsdk-base.so.2.0.3` with
 `-fsanitize=address,undefined -fno-omit-frame-pointer`. Build the smoke test
 binary against it. Run 10 times with `ASAN_OPTIONS=detect_leaks=1`. Pass
 criterion: every run exits 0 with no ASAN warning.
@@ -139,17 +147,18 @@ criterion: every run exits 0 with no ASAN warning.
 
 ### Test 5 — License coverage audit
 
-**Hypothesis**: every source file in the repository carries an explicit
-`SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial` header.
+**Hypothesis**: every source file in the repository carries the SPDX identifier
+that applies to its documented licensing scope.
 
 **Method**: `make audit-licenses` walks every `.c`, `.h`, `.hpp`, `.py`,
-`.sh`, `.yml`, `.jazz`, `.s`, `Makefile`, and `.map` file (excluding
-`build/`, `dist/`, `prebuilt/`) and verifies the SPDX line is present.
+`.sh`, `.yml`, `.yaml`, `.jazz`, `.s`, `Makefile`, and `.map` file (excluding
+`build/`, `dist/`, `prebuilt/`). First-party SDK files must carry the
+AGPL/commercial-option identifier. The synchronized VaptVupt core must retain
+`GPL-3.0-or-later`; the combined integration test is `AGPL-3.0-or-later`.
 
-**Result**: **64 / 64 files PASS.** Notably, this required relicensing five
-`.jazz` Jasmin sources from MIT to AGPL (sole-author relicensing) and four
-VaptVupt files from GPL-3.0 to AGPL-3.0. See CHANGELOG.md "License
-unification" for details.
+**Result**: **96 / 96 files PASS.** The codec identifiers match upstream
+vaptvupt-codec 2.65.11, and the complete GPLv3 text ships as
+`LICENSE-GPL-3.0`.
 
 ### Test 6 — Symbol leakage audit
 
@@ -157,7 +166,7 @@ unification" for details.
 internal `zupt_*`, `vv_*`, or static-helper symbols are visible to
 downstream linkers.
 
-**Method**: `nm -D --defined-only build/libvuptsdk-base.so.2.0.0 | grep ' T '`
+**Method**: `nm -D --defined-only build/libvuptsdk-base.so.2.0.3 | grep ' T '`
 should produce only `zuptsdk_*`-prefixed symbols, all tagged
 `@@ZUPTSDK_1.0`.
 
@@ -258,7 +267,7 @@ RPATH, no dangerous symbols).
 **Method**: see `tools/checksec_lib.sh`. Inspects ELF headers, dynamic
 sections, and dynamic symbol table.
 
-**Result for source build (`build/libvuptsdk-base.so.2.0.0`)**:
+**Result for source build (`build/libvuptsdk-base.so.2.0.3`)**:
 
 ```
 ELF type:           DYN  ✓ PIE/PIC
@@ -271,7 +280,7 @@ Symbol versions:    ✓ 1 ABI versions (@@ZUPTSDK_1.0)
 Dangerous symbols:  ✓ PASS - none of gets/system/exec* used
 ```
 
-**Result for canonical prebuilt (`prebuilt/libvuptsdk.so.2.0.0`)**:
+**Result for frozen prebuilt (`prebuilt/libvuptsdk.so.2.0.3`)**:
 
 ```
 ELF type:           DYN  ✓ PIE/PIC
@@ -452,7 +461,7 @@ and is still verified here:
 | zupt 2.2 SDK fuzz round 1 | — | 250,000 | 0 crashes |
 | zupt 2.2 SDK fuzz round 2 | — | 500,000 | 0 crashes |
 | zupt 2.2.1 ASAN/UBSAN sweep | 169 | — | 0 memory errors |
-| zupt 2.2.2 god-tier audit | 169 | 1,000 | 0 crashes |
+| zupt 2.2.2 internal audit | 169 | 1,000 | 0 crashes |
 | libvuptsdk 2.0.0 initial | 30 + 13 | +11,500 | all green |
 | **libvuptsdk 2.0.0 extended (this audit)** | **30 + 13 + 5 new** | **+192,800** (incl. format-fuzz, key-iso, side-channel) | **all green** |
 | **Cumulative** | **220+** | **942,800** | **all green** |
@@ -478,11 +487,11 @@ Specs ship in `include/zupt_acsl.h`. They're a **partial**, not
 
 ## Open items (next minor version)
 
-The following are tracked as known gaps for the next release. None block
-2.0.0 production deployment, but each represents a real improvement.
+The following are unresolved release gaps. The current source integration is
+not a replacement full-ABI release while these remain open.
 
 1. **Open-source `zuptsdk_easy_*` implementations** — currently in binary
-   form only in `prebuilt/libvuptsdk.so.2.0.0`. Tracked as the top open
+   form only in `prebuilt/libvuptsdk.so.2.0.3`. Tracked as the top open
    item.
 2. **External independent cryptographic audit** — budget required (~$30-60k
    range with reputable firms like Trail of Bits, NCC Group, or Cure53).
@@ -526,8 +535,9 @@ cryptographic audit. It is an **honest internal assessment** of where the
 library stands. The line between "internal audit" and "external audit" is
 intentionally not blurred.
 
-For the methodology document used in the parent zupt project, see
-[zupt FORMAL_AUDIT_PROMPT.md](https://git.securityops.co/cristiancmoises/vaptvupt/src/branch/main/FORMAL_AUDIT_PROMPT.md).
+The parent project maintains its own executable checks and audit evidence.
+Results in this repository apply only to the SDK revision and artifacts named
+here.
 
 ---
 
@@ -548,12 +558,12 @@ make audit-licenses
 
 # 4. Adversarial fuzz (compile + run)
 cc -O2 -Iinclude tools/tamper_fuzz.c \
-   prebuilt/libvuptsdk.so.2.0.0 -o /tmp/tf -lpthread -lm
+   prebuilt/libvuptsdk.so.2.0.3 -o /tmp/tf -lpthread -lm
 LD_LIBRARY_PATH=prebuilt /tmp/tf
 
 # 5. Wrong-key fuzz
 cc -O2 -Iinclude tools/wrong_key_fuzz.c \
-   prebuilt/libvuptsdk.so.2.0.0 -o /tmp/wkf -lpthread -lm
+   prebuilt/libvuptsdk.so.2.0.3 -o /tmp/wkf -lpthread -lm
 LD_LIBRARY_PATH=prebuilt /tmp/wkf
 
 # 6. Cross-language binding tests

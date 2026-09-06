@@ -2,14 +2,18 @@
 
 [![License: AGPL-3.0+](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![ABI: ZUPTSDK_2.1](https://img.shields.io/badge/ABI-ZUPTSDK__2.1-green.svg)](zuptsdk.map)
-[![Status: production](https://img.shields.io/badge/status-production-brightgreen.svg)](AUDIT.md)
-[![Tests: 30/30](https://img.shields.io/badge/tests-30%2F30%20pass-brightgreen.svg)](AUDIT.md)
 
-**Post-quantum hybrid cryptography for production C, C++, Python, Node.js, Go, and Rust applications.**
+[Português do Brasil](README.pt-BR.md)
 
-`libvuptsdk` is the cryptographic backbone of the [VaptVupt](https://git.securityops.co/cristiancmoises/vaptvupt) backup utility (formerly *Zupt*). The library is also designed for **standalone use**: any application that needs strong, future-proof, audited encryption can link against it.
+**Post-quantum hybrid cryptography for C, C++, Python, Node.js, Go, and Rust applications.**
 
-> **Canonical repository:** [`git.securityops.co/cristiancmoises/libvuptsdk`](https://git.securityops.co/cristiancmoises/libvuptsdk), mirrored to [GitHub](https://github.com/cristiancmoises/libvuptsdk) and [Codeberg](https://codeberg.org/berkeley/libvuptsdk). See [Repositories & related projects](#repositories--related-projects).
+`libvuptsdk` provides the cryptographic and archive ABI used by client
+applications. **Zupt is an existing, separate consumer and retains its name.**
+The broader [VaptVupt](https://git.securityops.co/cristiancmoises/vaptvupt)
+application is related, but is not interchangeable with Zupt, this SDK, or the
+standalone codec. Applications can also link against the documented C ABI.
+
+> **Canonical repository:** [`git.securityops.co/cristiancmoises/libvuptsdk`](https://git.securityops.co/cristiancmoises/libvuptsdk), mirrored to [GitHub](https://github.com/cristiancmoises/libvuptsdk), [Codeberg](https://codeberg.org/berkeley/libvuptsdk), and [git.securityops.com.br](https://git.securityops.com.br/cristiancmoises/libvuptsdk). See [Repositories & related projects](#repositories--related-projects).
 
 ## Why libvuptsdk?
 
@@ -21,10 +25,14 @@
 | **Constant-time** | Critical primitives (AES, X25519, MAC compare, ML-KEM cmov-select) are written in [Jasmin](https://github.com/jasmin-lang/jasmin) and verified constant-time by the type system. |
 | **Forward secrecy** | Per-archive ephemeral KEM session — past traffic stays protected even if long-term keys leak later. |
 | **Memory-hardened** | `mlock()` on private keys, explicit zeroization on free, RELRO, BIND_NOW, stack canaries, FORTIFY_SOURCE. |
-| **Stable C ABI** | Symbol-versioned (`ZUPTSDK_1.0`, `ZUPTSDK_2.1`) — old binaries keep working forever. |
+| **Stable C ABI** | Symbol-versioned (`ZUPTSDK_1.0`, `ZUPTSDK_2.1`) with compatibility preserved across compatible 2.x releases. |
 | **Multi-language** | Native bindings: Python, Node.js, Go, Rust, C, C++. |
 
-## Quick install
+## Existing frozen 2.0.3 packages
+
+> These commands refer to the previously built full-ABI 2.0.3 artifacts. They
+> do not contain codec 2.65.11. Creating replacement runtime packages is
+> blocked until the complete library can be rebuilt and re-audited.
 
 ### Debian / Ubuntu / Mint
 
@@ -43,14 +51,18 @@ sudo rpm -i ~/rpmbuild/RPMS/x86_64/libvuptsdk-2.0.3-*.rpm
 ### From source
 
 ```bash
-tar -xzf libvuptsdk-2.0.3.tar.gz
-cd libvuptsdk-2.0.3
-make
-sudo make install                  # → /usr/local/lib + /usr/local/include
-sudo make install PREFIX=/opt/zupt # custom prefix
+tar -xzf libvuptsdk-2.0.3-codec-2.65.11-unreleased-source.tar.gz
+cd libvuptsdk-2.0.3-codec-2.65.11-unreleased-source
+make base
+make test-source
 ```
 
-Verify the install:
+The source archive deliberately excludes the frozen full-ABI prebuilt. It
+builds `libvuptsdk-base.so` and `libvuptsdk-base.a`; it does not provide a
+current replacement for the complete `libvuptsdk.so` or an installable runtime
+package.
+
+Verify a separately installed frozen package:
 
 ```bash
 pkg-config --modversion vuptsdk    # → 2.0.3
@@ -63,7 +75,7 @@ int main(){printf("%s\n",zuptsdk_version_string());}' \
 
 # Tutorial: a 60-second tour
 
-This 5-step tutorial covers public-key encryption, password mode, field encryption, file encryption, and tamper detection. **Every example below is shipped as runnable code in [`doc/examples/`](doc/examples/) and verified by CI on every commit.**
+This 5-step tutorial covers public-key encryption, password mode, field encryption, file encryption, and tamper detection. The examples are shipped as runnable code in [`doc/examples/`](doc/examples/); validate them against the exact full-ABI library selected for deployment.
 
 ## Step 1 — Generate a keypair
 
@@ -454,10 +466,20 @@ This repository ships **two libraries**, an intentional design:
 
 | Library | Source | Symbols | When to use |
 |---|---|---|---|
-| `libvuptsdk-base.so` | from source in this repo | 55 (ZUPTSDK_1.0 subset) | Verifying the build, embedded use, builds where binary blobs aren't allowed |
-| `libvuptsdk.so` | bundled prebuilt | 68 (full ZUPTSDK_1.0 + 2.1, including `easy_*`) | **Production use; what `make install` installs and downstream apps link against** |
+| `libvuptsdk-base.so` | from source in this repo | 55 (ZUPTSDK_1.0 subset), with VaptVupt codec 2.65.11 | Verifying the build, embedded use, builds where binary blobs aren't allowed |
+| `libvuptsdk.so` | bundled prebuilt | 68 (full ZUPTSDK_1.0 + 2.1, including `easy_*`) | Frozen x86-64 compatibility artifact; what `make install` currently stages |
 
-**Why ship a prebuilt at all?** The `easy_*` convenience layer (`zuptsdk_easy_encrypt`, etc.) and a few v2.1 functions don't have source code in this public tree for legacy reasons. The prebuilt binary is the audited, production-deployed artifact; the from-source library proves the rest of the codebase is buildable and a strict subset.
+**Why retain a prebuilt at all?** The `easy_*` convenience layer
+(`zuptsdk_easy_encrypt`, etc.) and a few v2.1 functions do not have source code
+in this public tree for legacy reasons. The prebuilt is a frozen, historically
+audited compatibility artifact. The from-source library proves that the
+documented subset is buildable, but it is not a drop-in replacement for the
+complete ABI.
+
+> **Codec version boundary.** The source-built library embeds VaptVupt
+> 2.65.11. The full prebuilt has not been regenerated from this tree and must
+> not be renamed or described as containing that codec. Rebuilding and
+> re-auditing the complete ABI requires the missing full-library sources.
 
 > ⚠️ **ML-KEM-768 conformance & the prebuilt.** The FIPS 203 conformance fix and its 80/80 ACVP verification apply to the **from-source** library. The prebuilt has not been rebuilt from the patched source; regenerate and re-audit it before relying on it for standards-conformant, interoperable ML-KEM. See [ML-KEM-768 conformance status](#ml-kem-768-conformance-status).
 
@@ -476,25 +498,37 @@ The `make audit` target verifies on every build that:
 # Build, test, audit
 
 ```
-make             Build from-source + stage canonical prebuilt
+make base        Build the current source-based ABI subset
+make test-source Test the current source build and embedded codec
+make             Also stage the frozen full prebuilt for compatibility work
 make test        Compile + run smoke test, then audit, then license check
 make audit       Verify source build is a strict subset of canonical
-make audit-licenses  Verify all files have AGPL SPDX header
+make audit-licenses  Verify the SDK and codec per-file SPDX scopes
 make test-asan   Build from-source with ASAN/UBSAN
-make install     Install canonical + headers + pkg-config
+make install     Install the frozen full prebuilt; not a codec-2.65.11 build
 make uninstall   Remove installed files
-make dist        Build deterministic source tarball
+make dist        Build an unreleased source-only tarball
 make clean       Remove build artifacts
 ```
 
-Test suite — **30/30 properties pass**:
+The current source-only gate includes:
 
-- 10 smoke tests against canonical (version, keygen, encrypt/decrypt roundtrip, tamper, wrong-key, password mode)
-- 13 audit tests (architecture, SONAME, ABI versions, namespace hygiene, no-leakage)
 - 6 ASAN/UBSAN smoke tests against the source-build (ctx/options lifecycle, secure_zero)
-- 1 license audit (every file has AGPL SPDX)
+- 57 focused serial and parallel embedded-codec checks, including exact
+  capacities, malformed input, policy parity, and BCJ decoding
+- 1 per-file license audit (SDK dual-license scope and embedded codec GPL scope)
 
-Plus 13 Python binding tests, 12 Node.js binding tests, 4 Go binding tests, and 5 Rust binding tests — all working code in `bindings/`.
+The repository also contains the historical full-prebuilt smoke/symbol tests
+and Python, Node.js, Go, and Rust binding suites. They were not rerun for this
+source integration because the frozen full binary's `libargon2.so.1` and
+`libcrypto.so.3` runtime dependencies are unavailable in the recorded local
+environment. See [AUDIT.md](AUDIT.md) for the exact current/historical split.
+
+The default x86-64 source build targets the architecture's SSE2 baseline; it
+does not force AVX2. Passing `VV_SIMD_FLAGS=-mavx2` is an explicit opt-in that
+makes the resulting whole codec artifact require an AVX2-capable CPU. The
+`make dist` filename includes `unreleased-source`, so it cannot be confused
+with the already-released SDK 2.0.3 artifacts.
 
 Separately, the **ML-KEM-768 conformance gate** ([`conformance-suite/`](conformance-suite/)) verifies FIPS 203 compliance of the from-source KEM: **80/80** official NIST ACVP vectors, byte-for-byte differentials against two independent implementations (both directions), and a dudect + ctgrind constant-time check. See [ML-KEM-768 conformance status](#ml-kem-768-conformance-status).
 
@@ -549,10 +583,13 @@ First-party libvuptsdk source is available under the **GNU Affero General
 Public License version 3 or later** or a separate signed commercial agreement.
 See [`LICENSE`](LICENSE), [`LICENSE-AGPL-3.0`](LICENSE-AGPL-3.0), `NOTICE`, and
 `LICENSE-COMMERCIAL`. The commercial notice is not itself a license grant and
-does not relicense dependencies, generated vectors, or prebuilt artifacts.
+does not relicense dependencies, generated vectors, prebuilt artifacts, or the
+embedded VaptVupt codec.
 
 First-party source files carry
-`SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial OR LicenseRef-libvuptsdk-Commercial`.
+`SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial`.
+Embedded VaptVupt files retain `SPDX-License-Identifier: GPL-3.0-or-later` and
+are distributed with [`LICENSE-GPL-3.0`](LICENSE-GPL-3.0).
 The `make audit-licenses` target enforces this on every CI run.
 
 Commercial-option rights require a separate written agreement signed by the
@@ -562,19 +599,23 @@ applicable copyright holder and licensee. Inquiries: `sac@securityops.co`.
 
 # Repositories & related projects
 
-The **VaptVupt** family (formerly *Zupt*) is developed on
-[`git.securityops.co`](https://git.securityops.co/cristiancmoises); GitHub and
-Codeberg are public mirrors.
+These repositories are developed on
+[`git.securityops.co`](https://git.securityops.co/cristiancmoises); GitHub,
+Codeberg, and `git.securityops.com.br` are mirrors. Zupt remains a separate
+consumer and is not renamed by this SDK.
 
 | Project | What it is | Canonical repository |
 |---|---|---|
-| **libvuptsdk** (this repo) | Post-quantum hybrid crypto SDK — the library you link against | [`git.securityops.co/cristiancmoises/libvuptsdk`](https://git.securityops.co/cristiancmoises/libvuptsdk) · mirrors: [GitHub](https://github.com/cristiancmoises/libvuptsdk), [Codeberg](https://codeberg.org/berkeley/libvuptsdk) |
+| **libvuptsdk** (this repo) | Post-quantum hybrid crypto SDK — the library you link against | [`git.securityops.co/cristiancmoises/libvuptsdk`](https://git.securityops.co/cristiancmoises/libvuptsdk) · mirrors: [GitHub](https://github.com/cristiancmoises/libvuptsdk), [Codeberg](https://codeberg.org/berkeley/libvuptsdk), [securityops.com.br](https://git.securityops.com.br/cristiancmoises/libvuptsdk) |
+| **Zupt** | Existing separate SDK consumer; its name and dependency contract are preserved | Managed in its own repository and checkout |
 | **vaptvupt** | The backup utility (CLI + GUI) built on this SDK | [`git.securityops.co/cristiancmoises/vaptvupt`](https://git.securityops.co/cristiancmoises/vaptvupt) |
 | **vaptvupt-codec** | The standalone VaptVupt compression codec embedded here (`src/vv_*.c`) | [`git.securityops.co/cristiancmoises/vaptvupt-codec`](https://git.securityops.co/cristiancmoises/vaptvupt-codec) |
 
-The embedded codec is kept **verbatim-synced** to a tagged `vaptvupt-codec`
-release (currently **v2.48.2**); see [`CHANGELOG.md`](CHANGELOG.md) for the sync
-policy and provenance.
+The embedded core files are synchronized to tagged `vaptvupt-codec` release
+**v2.65.11**, commit `1cc78bce90619dbf97e0ed1ad449c3c4f6329041`.
+The small `vaptvupt_api` wrapper intentionally keeps the SDK's outer-checksum
+and conservative-format policy; see [`CHANGELOG.md`](CHANGELOG.md) and
+[`NOTICE`](NOTICE) for the differences and provenance.
 
 ---
 

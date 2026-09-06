@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * VaptVupt — Decoder v2 (Sprint 1)
  *
@@ -15,10 +15,11 @@
 #include "vv_platform.h"
 #include "vv_huffman.h"
 #include "vv_ans.h"
+#include "vv_bcj.h"
 #include <string.h>
 #include <stdlib.h>
 
-#if defined(__x86_64__) && defined(__AVX2__)
+#if VV_HAS_AVX2
 #include <immintrin.h>
 #define VV_INLINE_AVX2 1
 #else
@@ -33,10 +34,16 @@ static size_t read_ext_len(const uint8_t **pp, const uint8_t *end) {
     while (p < end) {
         uint8_t b = *p++;
         val += b;
-        if (b < 255) break;
+        if (b < 255) {
+            *pp = p;
+            return val;
+        }
     }
     *pp = p;
-    return val;
+    /* Even a zero extension requires its terminating byte. All token
+     * payloads are bounded by the 24-bit compressed-size field, so their
+     * byte sums fit below SIZE_MAX on both 32- and 64-bit hosts. */
+    return SIZE_MAX;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -52,18 +59,43 @@ static inline void wcopy32(uint8_t *d, const uint8_t *s) {
     _mm256_storeu_si256((__m256i *)d, _mm256_loadu_si256((const __m256i *)s));
 }
 
-static inline void wcopy_n(uint8_t *d, const uint8_t *s, size_t n) {
-    while (n >= 32) { wcopy32(d, s); d += 32; s += 32; n -= 32; }
-    if (n >= 16) { wcopy16(d, s); d += 16; s += 16; n -= 16; }
-    if (n > 0) wcopy16(d, s); /* safe over-copy in safe zone */
-}
-
 /* Match copy with offset >= 32: 32-byte chunks, NO over-copy at tail */
 static inline void match_copy_32(uint8_t *d, const uint8_t *s, size_t n) {
     while (n >= 32) { wcopy32(d, s); d += 32; s += 32; n -= 32; }
     /* Exact tail: use 16-byte then memcpy to avoid corrupting future output */
     if (n >= 16) { wcopy16(d, s); d += 16; s += 16; n -= 16; }
     if (n > 0) memcpy(d, s, n);
+}
+
+/* SPRINT 53: hot-path match copy for offset >= 32 used ONLY when the
+ * caller guarantees >= 32 bytes of writable margin past d (the phase-2
+ * op_safe invariant: op < op_end - 72). Profiling dickens decode showed
+ * 98.9% of matches have offset >= 32 and average match length 6.9 bytes,
+ * so match_copy_32's tail `memcpy(d,s,n)` for tiny n was the dominant
+ * decode operation. An unconditional 32-byte store (lz4's decode trick)
+ * is branch-free and faster for the common short match; the over-copy
+ * lands in allocated safe-margin bytes that the next token overwrites.
+ * offset >= 32 guarantees [s, s+32) does not overlap [d, d+32), so a
+ * single wide load/store is correct regardless of match length. For
+ * n > 32 (rare: ~1% of matches), fall back to the chunked copy. */
+static inline void match_copy_32_hot(uint8_t *d, const uint8_t *s, size_t n) {
+    if (VV_LIKELY(n <= 32)) {
+        wcopy32(d, s);            /* single 32-byte store covers all n <= 32 */
+    } else {
+        /* n > 32 (rare: ~1% of matches). The 32-byte chunk loop is followed
+         * by an EXACT tail (16-byte then memcpy) rather than a final 32-byte
+         * over-store: the caller's room guarantee is only >= 32 bytes (the
+         * single-store case), not the rounded-up >= ((n+31)&~31) the old
+         * unconditional tail store needed. An over-store here writes up to
+         * 32 - (n & 31) bytes past op_end on an exactly-content-sized output
+         * buffer (heap-buffer-overflow WRITE). Exact tail keeps it in bounds;
+         * for n > 32 the per-store cost is already amortized so this is not a
+         * hot-path regression. */
+        wcopy32(d, s); d += 32; s += 32; n -= 32;
+        while (n >= 32) { wcopy32(d, s); d += 32; s += 32; n -= 32; }
+        if (n >= 16) { wcopy16(d, s); d += 16; s += 16; n -= 16; }
+        if (n > 0) memcpy(d, s, n);
+    }
 }
 
 /* Match copy with offset 16-31: 16-byte chunks, exact tail */
@@ -105,13 +137,14 @@ static __attribute__((always_inline)) inline vv_error_t
 decode_block_tokens_impl(
     const uint8_t *ip, size_t ip_len,
     uint8_t *op, size_t dst_cap, size_t *out_len,
-    const uint8_t *dst_base,
+    const uint8_t *dst_base, uint32_t max_offset,
     const int off_bytes)  /* compile-time constant after inlining */
 {
     const uint8_t *const ip_end = ip + ip_len;
     uint8_t *const op_start = op;
     uint8_t *const op_end = op + dst_cap;
 
+#if VV_INLINE_AVX2
     /* PERF: widened safe-zone margins (was 24/40).
      * Larger margins = fewer bound-check-triggered loop exits per block.
      * Exit boundary: max is 1 token + 14 lits + 3 offset + 6 match_ext = 24.
@@ -120,29 +153,30 @@ decode_block_tokens_impl(
     const uint8_t *const ip_safe = (ip_len > 48) ? (ip_end - 48) : ip;
     uint8_t *const op_safe = (dst_cap > 72) ? (op_end - 72) : op;
 
-    /* PERF: once we've written enough bytes, any offset ≤ max_dist passes
-     * the "offset > op - dst_base" check. Max offset is (1 << wlog) - 1,
-     * at most (1<<20) - 1 for wlog=20. So past this threshold, only
-     * offset==0 needs checking (invalid/corrupted). */
-    const uint32_t max_valid_off = (off_bytes == 2) ? 0xFFFF : 0xFFFFFF;
+    /* Once the output history exceeds the advertised window, any offset
+     * in [1, max_offset] is in-bounds. The unsigned offset - 1 comparison
+     * rejects both zero and out-of-window offsets in a single range check. */
+    const uint32_t max_valid_off = max_offset;
 
-#if VV_INLINE_AVX2
     /* PERF: two-phase fast path.
      * Phase 1 (warmup): op hasn't advanced far enough to make any offset
      *   automatically valid. Do full offset validation per sequence.
      * Phase 2 (hot): op - dst_base > max_valid_off, so any non-zero
-     *   offset within 2/3 bytes is automatically valid — skip the
-     *   (op - dst_base) comparison, keep only offset==0 check. */
+     *   offset within the window is valid — skip the history comparison,
+     *   keep the offset range check. */
 
     /* Phase 1: warmup — full validation */
     while (VV_LIKELY(ip < ip_safe && op < op_safe
-                      && (uint32_t)(op - dst_base) <= max_valid_off)) {
+                      && (size_t)(op - dst_base) <= max_valid_off)) {
         uint32_t token = *ip++;
         uint32_t ll = token >> 4;
         uint32_t mc = token & 0x0F;
 
-        if (VV_UNLIKELY(ll == 15))
-            ll += (uint32_t)read_ext_len(&ip, ip_end);
+        if (VV_UNLIKELY(ll == 15)) {
+            size_t ext = read_ext_len(&ip, ip_end);
+            if (VV_UNLIKELY(ext == SIZE_MAX)) return VV_ERR_CORRUPT;
+            ll += (uint32_t)ext;
+        }
 
         /* Sprint 109 fix: corrupt ll extension can yield a huge ll
          * that exceeds remaining input or output. Found by libFuzzer
@@ -152,19 +186,38 @@ decode_block_tokens_impl(
         if (VV_UNLIKELY((size_t)(ip_end - ip) < ll || (size_t)(op_end - op) < ll))
             return -1;
 
-        if (VV_LIKELY(ll <= 14 && ip + ll + 2 <= ip_end)) {
+        if (VV_LIKELY(ll <= 14 && (size_t)(ip_end - ip) >= (size_t)ll + 2)) {
             uint16_t off_raw;
             memcpy(&off_raw, ip + ll, 2);
-            if (off_raw > 0)
-                VV_PREFETCH(op + ll - off_raw);
+            /* ll fits the output above; validate history before forming
+             * a prefetch pointer, even though a bad offset is rejected later. */
+            uint8_t *lit_end = op + ll;
+            if (off_raw > 0 && off_raw <= (size_t)(lit_end - dst_base))
+                VV_PREFETCH(lit_end - off_raw);
         }
 
-        if (ll > 0)
+        /* SPRINT 125: wildcopy for the dominant ll <= 14 case. The loop
+         * guards reserve 48 bytes of readable input (ip < ip_safe; ip has
+         * advanced by only the 1 token byte since, as ll <= 14 implies no
+         * extension bytes) and 72 bytes of writable output (op < op_safe;
+         * op unchanged since entry), so one unconditional 16-byte copy is
+         * in-bounds and replaces memcpy's branchy variable-size dispatch.
+         * The extra bytes past ll are overwritten by the next copy. */
+        if (VV_LIKELY(ll <= 14)) {
+            memcpy(op, ip, 16);
+        } else {
             memcpy(op, ip, ll);
+        }
         ip += ll;
         op += ll;
 
         if (VV_UNLIKELY(ip >= ip_end)) break;
+        /* An extended literal run invalidates the loop's entry lookahead.
+         * Check the complete offset before the wide load; otherwise a
+         * truncated offset (one byte left for a 2/3-byte field) is an OOB
+         * read in the AVX2 warmup path. */
+        if (VV_UNLIKELY((size_t)(ip_end - ip) < (size_t)off_bytes))
+            return VV_ERR_CORRUPT;
 
         uint32_t offset;
         if (off_bytes == 2) {
@@ -175,14 +228,41 @@ decode_block_tokens_impl(
         ip += off_bytes;
 
         uint32_t mlen = mc + VV_MIN_MATCH;
-        if (VV_UNLIKELY(mc == 15))
-            mlen += (uint32_t)read_ext_len(&ip, ip_end);
+        if (VV_UNLIKELY(mc == 15)) {
+            size_t ext = read_ext_len(&ip, ip_end);
+            if (VV_UNLIKELY(ext == SIZE_MAX)) return VV_ERR_CORRUPT;
+            mlen += (uint32_t)ext;
+        }
 
-        if (VV_UNLIKELY(offset == 0 || offset > (uint32_t)(op - dst_base)))
+        if (VV_UNLIKELY(offset - 1u >= max_offset || offset > (size_t)(op - dst_base)))
             return VV_ERR_CORRUPT;
 
+        /* Phase-1 warmup previously lacked the match-length output bound that
+         * phase 2 and the general/tail path carry. A corrupt match-length
+         * extension can make mlen large enough that match_copy writes past
+         * op_end (heap-buffer-overflow WRITE, e.g. via match_overlap for
+         * offset < 8). The op < op_safe loop guard only reserves a 72-byte
+         * margin and does not bound an extended mlen. On a VALID stream
+         * op + mlen never exceeds op_end, so this branch is never taken and
+         * decode output is byte-identical; it only rejects corrupt input. */
+        if (VV_UNLIKELY((size_t)(op_end - op) < mlen))
+            return VV_ERR_OVERFLOW;
+
+        /* match_copy_32_hot does an unconditional 32-byte store (lz4 trick)
+         * and so requires >= 32 bytes of writable room past op. The op_safe
+         * loop guard reserves 72 bytes at loop *entry*, but op advances by ll
+         * (which can be large via a literal-length extension) before this
+         * copy, so op can land within 32 bytes of op_end mid-iteration. When
+         * the remaining room is < 32, use the exact-tail match_copy_32 to
+         * avoid an over-write past op_end (heap-buffer-overflow WRITE on an
+         * exactly-content-sized output buffer; the wide-store overshoot is
+         * up to 32 - mlen bytes). Byte-identical: both copy the same mlen
+         * bytes; only the harmless trailing over-write differs. */
         if (VV_LIKELY(offset >= 32)) {
-            match_copy_32(op, op - offset, mlen);
+            if (VV_LIKELY((size_t)(op_end - op) >= 32))
+                match_copy_32_hot(op, op - offset, mlen);
+            else
+                match_copy_32(op, op - offset, mlen);
         } else if (offset >= 16) {
             match_copy_16(op, op - offset, mlen);
         } else if (offset >= 8) {
@@ -193,15 +273,18 @@ decode_block_tokens_impl(
         op += mlen;
     }
 
-    /* Phase 2: hot path — op is far enough in that any non-zero offset
-     * within 2-byte or 3-byte range is automatically valid. */
+    /* Phase 2: hot path — op is far enough in that any offset within the
+     * advertised frame window is automatically within decoded history. */
     while (VV_LIKELY(ip < ip_safe && op < op_safe)) {
         uint32_t token = *ip++;
         uint32_t ll = token >> 4;
         uint32_t mc = token & 0x0F;
 
-        if (VV_UNLIKELY(ll == 15))
-            ll += (uint32_t)read_ext_len(&ip, ip_end);
+        if (VV_UNLIKELY(ll == 15)) {
+            size_t ext = read_ext_len(&ip, ip_end);
+            if (VV_UNLIKELY(ext == SIZE_MAX)) return VV_ERR_CORRUPT;
+            ll += (uint32_t)ext;
+        }
 
         /* Sprint 109 fix: corrupt ll extension can yield a huge ll
          * that exceeds remaining input or output. Found by libFuzzer
@@ -211,19 +294,34 @@ decode_block_tokens_impl(
         if (VV_UNLIKELY((size_t)(ip_end - ip) < ll || (size_t)(op_end - op) < ll))
             return -1;
 
-        if (VV_LIKELY(ll <= 14 && ip + ll + 2 <= ip_end)) {
+        if (VV_LIKELY(ll <= 14 && (size_t)(ip_end - ip) >= (size_t)ll + 2)) {
             uint16_t off_raw;
             memcpy(&off_raw, ip + ll, 2);
-            if (off_raw > 0)
-                VV_PREFETCH(op + ll - off_raw);
+            uint8_t *lit_end = op + ll;
+            if (off_raw > 0 && off_raw <= (size_t)(lit_end - dst_base))
+                VV_PREFETCH(lit_end - off_raw);
         }
 
-        if (ll > 0)
+        /* SPRINT 125: wildcopy for the dominant ll <= 14 case. The loop
+         * guards reserve 48 bytes of readable input (ip < ip_safe; ip has
+         * advanced by only the 1 token byte since, as ll <= 14 implies no
+         * extension bytes) and 72 bytes of writable output (op < op_safe;
+         * op unchanged since entry), so one unconditional 16-byte copy is
+         * in-bounds and replaces memcpy's branchy variable-size dispatch.
+         * The extra bytes past ll are overwritten by the next copy. */
+        if (VV_LIKELY(ll <= 14)) {
+            memcpy(op, ip, 16);
+        } else {
             memcpy(op, ip, ll);
+        }
         ip += ll;
         op += ll;
 
         if (VV_UNLIKELY(ip >= ip_end)) break;
+        /* Literal extensions consume the input margin reserved at loop
+         * entry; validate the entire offset before loading it. */
+        if (VV_UNLIKELY((size_t)(ip_end - ip) < (size_t)off_bytes))
+            return VV_ERR_CORRUPT;
 
         uint32_t offset;
         if (off_bytes == 2) {
@@ -234,15 +332,39 @@ decode_block_tokens_impl(
         ip += off_bytes;
 
         uint32_t mlen = mc + VV_MIN_MATCH;
-        if (VV_UNLIKELY(mc == 15))
-            mlen += (uint32_t)read_ext_len(&ip, ip_end);
+        if (VV_UNLIKELY(mc == 15)) {
+            size_t ext = read_ext_len(&ip, ip_end);
+            if (VV_UNLIKELY(ext == SIZE_MAX)) return VV_ERR_CORRUPT;
+            mlen += (uint32_t)ext;
+        }
 
         /* No (op - dst_base) check needed — op is past max_valid_off */
-        if (VV_UNLIKELY(offset == 0))
+        if (VV_UNLIKELY(offset - 1u >= max_offset))
             return VV_ERR_CORRUPT;
 
+        /* Phase-2 previously had NO output-length bound before the match
+         * copy — it relied solely on the op < op_safe loop guard
+         * (op_safe = op_end - 72). A corrupt token whose match-length
+         * extension makes mlen large can therefore drive match_copy_32_hot
+         * to write past op_end (found under ASan on corrupt input). The
+         * general/tail path already has this exact check (op + mlen >
+         * op_end → OVERFLOW); add it to the hot path too. On a VALID
+         * stream op + mlen never exceeds op_end, so this branch is never
+         * taken and decode output/perf is unchanged; it only stops corrupt
+         * input from over-writing. */
+        if (VV_UNLIKELY((size_t)(op_end - op) < mlen))
+            return VV_ERR_OVERFLOW;
+
+        /* See phase-1: match_copy_32_hot over-writes a full 32 bytes, so it
+         * needs >= 32 bytes of room past op. op advances by ll within the
+         * iteration, so guard against the exact buffer end and fall back to
+         * the exact-tail match_copy_32 when room < 32. Byte-identical output;
+         * prevents an OOB write on an exactly-content-sized buffer. */
         if (VV_LIKELY(offset >= 32)) {
-            match_copy_32(op, op - offset, mlen);
+            if (VV_LIKELY((size_t)(op_end - op) >= 32))
+                match_copy_32_hot(op, op - offset, mlen);
+            else
+                match_copy_32(op, op - offset, mlen);
         } else if (offset >= 16) {
             match_copy_16(op, op - offset, mlen);
         } else if (offset >= 8) {
@@ -260,11 +382,14 @@ decode_block_tokens_impl(
         size_t ll = token >> 4;
         size_t mc = token & 0x0F;
 
-        if (VV_UNLIKELY(ll == 15))
-            ll += read_ext_len(&ip, ip_end);
+        if (VV_UNLIKELY(ll == 15)) {
+            size_t ext = read_ext_len(&ip, ip_end);
+            if (VV_UNLIKELY(ext == SIZE_MAX)) return VV_ERR_CORRUPT;
+            ll += ext;
+        }
 
-        if (VV_UNLIKELY(ip + ll > ip_end)) return VV_ERR_CORRUPT;
-        if (VV_UNLIKELY(op + ll > op_end)) return VV_ERR_OVERFLOW;
+        if (VV_UNLIKELY(ll > (size_t)(ip_end - ip))) return VV_ERR_CORRUPT;
+        if (VV_UNLIKELY(ll > (size_t)(op_end - op))) return VV_ERR_OVERFLOW;
 
         if (ll > 0) vv_copy_fast(op, ip, ll);
         ip += ll;
@@ -272,7 +397,7 @@ decode_block_tokens_impl(
 
         if (ip >= ip_end) break;
 
-        if (VV_UNLIKELY(ip + off_bytes > ip_end)) return VV_ERR_CORRUPT;
+        if (VV_UNLIKELY((size_t)off_bytes > (size_t)(ip_end - ip))) return VV_ERR_CORRUPT;
         uint32_t offset;
         if (off_bytes == 2) {
             offset = vv_read16(ip);
@@ -282,12 +407,15 @@ decode_block_tokens_impl(
         ip += off_bytes;
 
         size_t mlen = mc + VV_MIN_MATCH;
-        if (VV_UNLIKELY(mc == 15))
-            mlen += read_ext_len(&ip, ip_end);
+        if (VV_UNLIKELY(mc == 15)) {
+            size_t ext = read_ext_len(&ip, ip_end);
+            if (VV_UNLIKELY(ext == SIZE_MAX)) return VV_ERR_CORRUPT;
+            mlen += ext;
+        }
 
-        if (VV_UNLIKELY(offset == 0 || offset > (uint32_t)(op - dst_base)))
+        if (VV_UNLIKELY(offset - 1u >= max_offset || offset > (size_t)(op - dst_base)))
             return VV_ERR_CORRUPT;
-        if (VV_UNLIKELY(op + mlen > op_end))
+        if (VV_UNLIKELY(mlen > (size_t)(op_end - op)))
             return VV_ERR_OVERFLOW;
 
         vv_copy_match(op, offset, mlen);
@@ -302,28 +430,28 @@ decode_block_tokens_impl(
 static vv_error_t decode_block_tokens_w16(
     const uint8_t *ip, size_t ip_len,
     uint8_t *op, size_t dst_cap, size_t *out_len,
-    const uint8_t *dst_base)
+    const uint8_t *dst_base, uint32_t max_offset)
 {
-    return decode_block_tokens_impl(ip, ip_len, op, dst_cap, out_len, dst_base, 2);
+    return decode_block_tokens_impl(ip, ip_len, op, dst_cap, out_len, dst_base, max_offset, 2);
 }
 
 /* Specialized for 3-byte offsets (wlog > 16) */
 static vv_error_t decode_block_tokens_w20(
     const uint8_t *ip, size_t ip_len,
     uint8_t *op, size_t dst_cap, size_t *out_len,
-    const uint8_t *dst_base)
+    const uint8_t *dst_base, uint32_t max_offset)
 {
-    return decode_block_tokens_impl(ip, ip_len, op, dst_cap, out_len, dst_base, 3);
+    return decode_block_tokens_impl(ip, ip_len, op, dst_cap, out_len, dst_base, max_offset, 3);
 }
 
 static vv_error_t decode_block_tokens(
     const uint8_t *ip, size_t ip_len,
     uint8_t *op, size_t dst_cap, size_t *out_len, int off_bytes,
-    const uint8_t *dst_base)
+    const uint8_t *dst_base, uint32_t max_offset)
 {
     if (off_bytes == 2)
-        return decode_block_tokens_w16(ip, ip_len, op, dst_cap, out_len, dst_base);
-    return decode_block_tokens_w20(ip, ip_len, op, dst_cap, out_len, dst_base);
+        return decode_block_tokens_w16(ip, ip_len, op, dst_cap, out_len, dst_base, max_offset);
+    return decode_block_tokens_w20(ip, ip_len, op, dst_cap, out_len, dst_base, max_offset);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -340,7 +468,7 @@ decode_stripped_tokens_impl(
     const uint8_t *ip, size_t ip_len,
     const uint8_t *lit_buf, size_t lit_len,
     uint8_t *op, size_t dst_cap, size_t *out_len,
-    const uint8_t *dst_base,
+    const uint8_t *dst_base, uint32_t max_offset,
     const int off_bytes)
 {
     const uint8_t *ip_end = ip + ip_len;
@@ -353,11 +481,14 @@ decode_stripped_tokens_impl(
         size_t ll = token >> 4;
         size_t mc = token & 0x0F;
 
-        if (VV_UNLIKELY(ll == 15))
-            ll += read_ext_len(&ip, ip_end);
+        if (VV_UNLIKELY(ll == 15)) {
+            size_t ext = read_ext_len(&ip, ip_end);
+            if (VV_UNLIKELY(ext == SIZE_MAX)) return VV_ERR_CORRUPT;
+            ll += ext;
+        }
 
-        if (VV_UNLIKELY(lit_pos + ll > lit_len)) return VV_ERR_CORRUPT;
-        if (VV_UNLIKELY(op + ll > op_end)) return VV_ERR_OVERFLOW;
+        if (VV_UNLIKELY(ll > lit_len - lit_pos)) return VV_ERR_CORRUPT;
+        if (VV_UNLIKELY(ll > (size_t)(op_end - op))) return VV_ERR_OVERFLOW;
         if (ll > 0) {
             memcpy(op, lit_buf + lit_pos, ll);
             lit_pos += ll;
@@ -366,7 +497,7 @@ decode_stripped_tokens_impl(
 
         if (ip >= ip_end) break;
 
-        if (VV_UNLIKELY(ip + off_bytes > ip_end)) return VV_ERR_CORRUPT;
+        if (VV_UNLIKELY((size_t)off_bytes > (size_t)(ip_end - ip))) return VV_ERR_CORRUPT;
         /* PERF: off_bytes is compile-time constant here */
         uint32_t offset;
         if (off_bytes == 2) {
@@ -377,13 +508,16 @@ decode_stripped_tokens_impl(
         ip += off_bytes;
 
         size_t mlen = mc + VV_MIN_MATCH;
-        if (VV_UNLIKELY(mc == 15))
-            mlen += read_ext_len(&ip, ip_end);
+        if (VV_UNLIKELY(mc == 15)) {
+            size_t ext = read_ext_len(&ip, ip_end);
+            if (VV_UNLIKELY(ext == SIZE_MAX)) return VV_ERR_CORRUPT;
+            mlen += ext;
+        }
 
-        if (VV_UNLIKELY(offset == 0 || offset > (uint32_t)(op - dst_base))) {
+        if (VV_UNLIKELY(offset - 1u >= max_offset || offset > (size_t)(op - dst_base))) {
             return VV_ERR_CORRUPT;
         }
-        if (VV_UNLIKELY(op + mlen > op_end))
+        if (VV_UNLIKELY(mlen > (size_t)(op_end - op)))
             return VV_ERR_OVERFLOW;
 
         vv_copy_match(op, offset, mlen);
@@ -398,14 +532,14 @@ static vv_error_t decode_stripped_tokens(
     const uint8_t *ip, size_t ip_len,
     const uint8_t *lit_buf, size_t lit_len,
     uint8_t *op, size_t dst_cap, size_t *out_len, int off_bytes,
-    const uint8_t *dst_base)
+    const uint8_t *dst_base, uint32_t max_offset)
 {
     if (off_bytes == 2) {
         return decode_stripped_tokens_impl(ip, ip_len, lit_buf, lit_len,
-                                            op, dst_cap, out_len, dst_base, 2);
+                                            op, dst_cap, out_len, dst_base, max_offset, 2);
     }
     return decode_stripped_tokens_impl(ip, ip_len, lit_buf, lit_len,
-                                        op, dst_cap, out_len, dst_base, 3);
+                                        op, dst_cap, out_len, dst_base, max_offset, 3);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -417,7 +551,7 @@ static vv_error_t decode_stripped_tokens(
 static vv_error_t decode_block_huffman(
     const uint8_t *data, size_t data_len,
     uint8_t *output, size_t decomp_size, size_t *out_len, int off_bytes,
-    const uint8_t *dst_base)
+    const uint8_t *dst_base, uint32_t max_offset)
 {
     if (data_len < 4) return VV_ERR_CORRUPT;
 
@@ -442,7 +576,7 @@ static vv_error_t decode_block_huffman(
 
     vv_error_t err = decode_stripped_tokens(tokens, tok_len,
                                              lit_buf, lit_count,
-                                             output, decomp_size, out_len, off_bytes, dst_base);
+                                             output, decomp_size, out_len, off_bytes, dst_base, max_offset);
     free(lit_buf);
     return err;
 }
@@ -456,7 +590,7 @@ static vv_error_t decode_block_huffman(
 static vv_error_t decode_block_ans(
     const uint8_t *data, size_t data_len,
     uint8_t *output, size_t decomp_size, size_t *out_len, int off_bytes,
-    const uint8_t *dst_base)
+    const uint8_t *dst_base, uint32_t max_offset)
 {
     if (data_len < 4) return VV_ERR_CORRUPT;
 
@@ -480,7 +614,7 @@ static vv_error_t decode_block_ans(
 
     vv_error_t err = decode_stripped_tokens(tokens, tok_len,
                                              lit_buf, lit_count,
-                                             output, decomp_size, out_len, off_bytes, dst_base);
+                                             output, decomp_size, out_len, off_bytes, dst_base, max_offset);
     free(lit_buf);
     return err;
 }
@@ -492,7 +626,7 @@ static vv_error_t decode_block_ans(
 static vv_error_t decode_block_ans4(
     const uint8_t *data, size_t data_len,
     uint8_t *output, size_t decomp_size, size_t *out_len, int off_bytes,
-    const uint8_t *dst_base)
+    const uint8_t *dst_base, uint32_t max_offset)
 {
     if (data_len < 4) return VV_ERR_CORRUPT;
 
@@ -514,7 +648,7 @@ static vv_error_t decode_block_ans4(
 
     vv_error_t err = decode_stripped_tokens(tokens, tok_len,
                                              lit_buf, lit_count,
-                                             output, decomp_size, out_len, off_bytes, dst_base);
+                                             output, decomp_size, out_len, off_bytes, dst_base, max_offset);
     free(lit_buf);
     return err;
 }
@@ -526,7 +660,7 @@ static vv_error_t decode_block_ans4(
 static vv_error_t decode_block_ctx(
     const uint8_t *data, size_t data_len,
     uint8_t *output, size_t decomp_size, size_t *out_len, int off_bytes,
-    const uint8_t *dst_base)
+    const uint8_t *dst_base, uint32_t max_offset)
 {
     if (data_len < 4) return VV_ERR_CORRUPT;
 
@@ -548,9 +682,22 @@ static vv_error_t decode_block_ctx(
 
     vv_error_t err = decode_stripped_tokens(tokens, tok_len,
                                              lit_buf, lit_count,
-                                             output, decomp_size, out_len, off_bytes, dst_base);
+                                             output, decomp_size, out_len, off_bytes, dst_base, max_offset);
     free(lit_buf);
     return err;
+}
+
+/* A frame's window header is a decoding invariant, not a hint. Keeping its
+ * exact bound lets the SEQ decoder enter its proven fast zone after the
+ * advertised history distance instead of always waiting for 16 MiB. */
+static int frame_max_offset(uint8_t window_log, uint32_t *max_offset) {
+    uint32_t limit;
+    if (window_log < 10 || window_log > 24) return 0;
+    limit = (window_log == 24) ? 0xFFFFFFu : (1u << window_log);
+    if (limit > 0xFFFFFFu) limit = 0xFFFFFFu;
+    if (window_log <= 16 && limit > 0xFFFFu) limit = 0xFFFFu;
+    *max_offset = limit;
+    return 1;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -574,10 +721,12 @@ int64_t vv_decompress_flags(const uint8_t *src, size_t src_len,
     uint8_t *op_end = dst + dst_cap;
 
     /* MULTI-FRAME: a .vv file may contain one or more concatenated frames
-     * (useful for parallel encode, Zupt-style archives, append-mode
+     * (useful for parallel encode, multi-frame archives, append-mode
      * writes). We decode frames in a loop until input is exhausted. */
     while (ip < ip_end) {
-        if (ip + sizeof(vv_frame_header_t) > ip_end) return VV_ERR_CORRUPT;
+        /* Compare lengths before forming an advanced pointer: malformed
+         * sizes must not create a pointer beyond the input object. */
+        if ((size_t)(ip_end - ip) < sizeof(vv_frame_header_t)) return VV_ERR_CORRUPT;
 
         vv_frame_header_t fh;
         memcpy(&fh, ip, sizeof(fh));
@@ -585,6 +734,13 @@ int64_t vv_decompress_flags(const uint8_t *src, size_t src_len,
 
         if (fh.magic != VV_MAGIC) return VV_ERR_BAD_MAGIC;
         if (fh.version != 1) return VV_ERR_CORRUPT;
+        /* A frame can carry one architecture-specific BCJ transform, never
+         * both.  Applying two inverses in sequence has no defined wire
+         * meaning, so reject the ambiguous header before decoding output. */
+        if ((fh.flags & 0x0Cu) == 0x0Cu) return VV_ERR_CORRUPT;
+
+        uint32_t max_offset;
+        if (!frame_max_offset(fh.window_log, &max_offset)) return VV_ERR_CORRUPT;
 
         int has_checksum = (fh.flags & 1);
         int off_bytes = (fh.window_log > 16) ? 3 : 2;
@@ -595,7 +751,7 @@ int64_t vv_decompress_flags(const uint8_t *src, size_t src_len,
         uint8_t *frame_out_start = op;
 
         for (;;) {
-            if (ip + 4 > ip_end) return VV_ERR_CORRUPT;
+            if ((size_t)(ip_end - ip) < 4) return VV_ERR_CORRUPT;
             uint32_t bh_packed;
             memcpy(&bh_packed, ip, 4); ip += 4;
 
@@ -604,31 +760,30 @@ int64_t vv_decompress_flags(const uint8_t *src, size_t src_len,
             uint32_t dsz = vv_bh_size(bh_packed);
 
             if (dsz > VV_MAX_BLOCK_SIZE) return VV_ERR_OVERFLOW;
-            if ((size_t)(op - dst) + dsz > dst_cap) return VV_ERR_OVERFLOW;
-            (void)op_end;
+            if ((size_t)dsz > (size_t)(op_end - op)) return VV_ERR_OVERFLOW;
 
             if (btype == VV_BLOCK_RAW) {
-                if (ip + dsz > ip_end) return VV_ERR_CORRUPT;
+                if ((size_t)dsz > (size_t)(ip_end - ip)) return VV_ERR_CORRUPT;
                 memcpy(op, ip, dsz); ip += dsz; op += dsz;
             } else if (btype == VV_BLOCK_RLE) {
                 if (ip >= ip_end) return VV_ERR_CORRUPT;
                 memset(op, *ip++, dsz); op += dsz;
             } else if (btype == VV_BLOCK_COMPRESSED) {
-                if (ip + 3 > ip_end) return VV_ERR_CORRUPT;
+                if ((size_t)(ip_end - ip) < 3) return VV_ERR_CORRUPT;
                 uint32_t csz = (uint32_t)ip[0] | ((uint32_t)ip[1] << 8) | ((uint32_t)ip[2] << 16);
                 ip += 3;
-                if (ip + csz > ip_end) return VV_ERR_CORRUPT;
+                if ((size_t)csz > (size_t)(ip_end - ip)) return VV_ERR_CORRUPT;
 
                 size_t actual = 0;
-                vv_error_t err = decode_block_tokens(ip, csz, op, dsz, &actual, off_bytes, frame_out_start);
+                vv_error_t err = decode_block_tokens(ip, csz, op, dsz, &actual, off_bytes, frame_out_start, max_offset);
                 if (err != VV_OK) return err;
                 if (actual != dsz) return VV_ERR_CORRUPT;
                 ip += csz; op += dsz;
             } else if (btype == VV_BLOCK_ENTROPY) {
-                if (ip + 3 > ip_end) return VV_ERR_CORRUPT;
+                if ((size_t)(ip_end - ip) < 3) return VV_ERR_CORRUPT;
                 uint32_t csz = (uint32_t)ip[0] | ((uint32_t)ip[1] << 8) | ((uint32_t)ip[2] << 16);
                 ip += 3;
-                if (csz < 1 || ip + csz > ip_end) return VV_ERR_CORRUPT;
+                if (csz < 1 || (size_t)csz > (size_t)(ip_end - ip)) return VV_ERR_CORRUPT;
 
                 uint8_t tag = ip[0];
                 const uint8_t *bdata = ip + 1;
@@ -637,21 +792,23 @@ int64_t vv_decompress_flags(const uint8_t *src, size_t src_len,
                 vv_error_t err;
 
                 if (tag == VV_ENTROPY_ANS) {
-                    err = decode_block_ans(bdata, bdata_len, op, dsz, &actual, off_bytes, frame_out_start);
+                    err = decode_block_ans(bdata, bdata_len, op, dsz, &actual, off_bytes, frame_out_start, max_offset);
                 } else if (tag == VV_ENTROPY_ANS4) {
-                    err = decode_block_ans4(bdata, bdata_len, op, dsz, &actual, off_bytes, frame_out_start);
+                    err = decode_block_ans4(bdata, bdata_len, op, dsz, &actual, off_bytes, frame_out_start, max_offset);
                 } else if (tag == VV_ENTROPY_CTX) {
-                    err = decode_block_ctx(bdata, bdata_len, op, dsz, &actual, off_bytes, frame_out_start);
+                    err = decode_block_ctx(bdata, bdata_len, op, dsz, &actual, off_bytes, frame_out_start, max_offset);
                 } else if (tag == VV_ENTROPY_SEQ) {
-                    err = vva_decode_sequences(bdata, bdata_len, op, dsz, &actual, frame_out_start);
+                    err = vva_decode_sequences_limited(bdata, bdata_len, op, dsz, &actual,
+                                                       frame_out_start, max_offset);
                     if (err != VV_OK) err = VV_ERR_CORRUPT;
                 } else if (tag == VV_ENTROPY_SEQ_V2) {
                     /* 'T' tag: sequence coding with min_match=3. Wire
                      * payload identical to 'S', only ml_base differs. */
-                    err = vva_decode_sequences_v2(bdata, bdata_len, op, dsz, &actual, frame_out_start);
+                    err = vva_decode_sequences_v2_limited(bdata, bdata_len, op, dsz, &actual,
+                                                          frame_out_start, max_offset);
                     if (err != VV_OK) err = VV_ERR_CORRUPT;
                 } else if (tag == VV_ENTROPY_HUFFMAN) {
-                    err = decode_block_huffman(bdata, bdata_len, op, dsz, &actual, off_bytes, frame_out_start);
+                    err = decode_block_huffman(bdata, bdata_len, op, dsz, &actual, off_bytes, frame_out_start, max_offset);
                 } else {
                     return VV_ERR_CORRUPT;
                 }
@@ -665,7 +822,7 @@ int64_t vv_decompress_flags(const uint8_t *src, size_t src_len,
         }
 
         if (has_checksum) {
-            if (ip + sizeof(vv_frame_footer_t) > ip_end) return VV_ERR_CORRUPT;
+            if ((size_t)(ip_end - ip) < sizeof(vv_frame_footer_t)) return VV_ERR_CORRUPT;
             vv_frame_footer_t ff;
             memcpy(&ff, ip, sizeof(ff));
             if (ff.footer_magic != 0x56564E44u) return VV_ERR_CORRUPT;
@@ -677,6 +834,21 @@ int64_t vv_decompress_flags(const uint8_t *src, size_t src_len,
                 if (computed != ff.checksum) return VV_ERR_CORRUPT;
             }
             ip += sizeof(vv_frame_footer_t);
+        }
+
+        /* x86 BCJ inverse (flags bit2): the encoder applied the forward
+         * branch transform to this frame's bytes BEFORE compression, and
+         * checksummed the transformed bytes, so we invert AFTER the
+         * checksum check, over exactly this frame's output region. The
+         * transform was done with ip=0 per frame, so the inverse uses 0
+         * too. No-op for frames without the flag. */
+        if (fh.flags & 4) {
+            vv_bcj_x86(frame_out_start, (size_t)(op - frame_out_start), 0, 0);
+        }
+        /* AArch64 BCJ inverse (flags bit3): same contract as the x86 case
+         * above. A frame carries at most one of bit2/bit3. */
+        if (fh.flags & 8) {
+            vv_bcj_arm64(frame_out_start, (size_t)(op - frame_out_start), 0, 0);
         }
 
         /* Loop back to try another frame (if input remains) */
@@ -721,7 +893,10 @@ struct vv_dstream_s {
     /* Input-side buffer for incomplete blocks/headers */
     uint8_t *in_buf;
     size_t   in_cap;
+    size_t   in_pos;  /* first unread byte in in_buf */
     size_t   in_len;
+
+    uint32_t max_offset;
 
     /* Output position tracking (for checksum and bookkeeping) */
     size_t   output_pos;
@@ -730,6 +905,21 @@ struct vv_dstream_s {
     /* Streaming checksum of decoded output */
     vv_xxh64_state_t cks;
 };
+
+/* Complete a streaming frame exactly once. BCJ checksums cover the
+ * transformed bytes, matching the one-shot decoder, so inversion belongs
+ * after checksum validation (or immediately after the final block when the
+ * checksum is disabled). The DONE fast path at function entry guarantees
+ * that a completed frame is never inverted twice. */
+static void dstream_finish(vv_dstream_t *ctx) {
+    if (ctx->fh.flags & 4) {
+        vv_bcj_x86(ctx->dst_base_saved, ctx->output_pos, 0, 0);
+    }
+    if (ctx->fh.flags & 8) {
+        vv_bcj_arm64(ctx->dst_base_saved, ctx->output_pos, 0, 0);
+    }
+    ctx->state = VV_DSTREAM_DONE;
+}
 
 vv_dstream_t *vv_dstream_create(void) {
     vv_dstream_t *ctx = (vv_dstream_t *)calloc(1, sizeof(vv_dstream_t));
@@ -754,6 +944,8 @@ int vv_dstream_reset(vv_dstream_t *ctx) {
     ctx->state = VV_DSTREAM_HEADER;
     ctx->has_checksum = 0;
     ctx->off_bytes = 0;
+    ctx->max_offset = 0;
+    ctx->in_pos = 0;
     ctx->in_len = 0;
     ctx->output_pos = 0;
     ctx->dst_base_saved = NULL;
@@ -766,7 +958,13 @@ int vv_dstream_reset(vv_dstream_t *ctx) {
 static int dstream_reserve(vv_dstream_t *ctx, size_t need) {
     if (need <= ctx->in_cap) return 0;
     size_t new_cap = ctx->in_cap;
-    while (new_cap < need) new_cap *= 2;
+    while (new_cap < need) {
+        if (new_cap > SIZE_MAX / 2) {
+            new_cap = need;
+            break;
+        }
+        new_cap *= 2;
+    }
     uint8_t *new_buf = (uint8_t *)realloc(ctx->in_buf, new_cap);
     if (!new_buf) return -1;
     ctx->in_buf = new_buf;
@@ -776,17 +974,30 @@ static int dstream_reserve(vv_dstream_t *ctx, size_t need) {
 
 /* Append bytes to input buffer */
 static int dstream_append(vv_dstream_t *ctx, const uint8_t *src, size_t src_len) {
-    if (dstream_reserve(ctx, ctx->in_len + src_len) != 0) return -1;
-    memcpy(ctx->in_buf + ctx->in_len, src, src_len);
+    if (src_len > SIZE_MAX - ctx->in_len) return -1;
+
+    /* Compact at most once per append, rather than after every decoded
+     * block. This avoids quadratic memory traffic for large input chunks. */
+    if (ctx->in_pos > 0 && src_len > ctx->in_cap - (ctx->in_pos + ctx->in_len)) {
+        memmove(ctx->in_buf, ctx->in_buf + ctx->in_pos, ctx->in_len);
+        ctx->in_pos = 0;
+    }
+    if (src_len > ctx->in_cap - (ctx->in_pos + ctx->in_len)) {
+        if (dstream_reserve(ctx, ctx->in_len + src_len) != 0) return -1;
+    }
+    memcpy(ctx->in_buf + ctx->in_pos + ctx->in_len, src, src_len);
     ctx->in_len += src_len;
     return 0;
 }
 
 /* Consume first n bytes from input buffer */
 static void dstream_consume(vv_dstream_t *ctx, size_t n) {
-    if (n >= ctx->in_len) ctx->in_len = 0;
+    if (n >= ctx->in_len) {
+        ctx->in_pos = 0;
+        ctx->in_len = 0;
+    }
     else {
-        memmove(ctx->in_buf, ctx->in_buf + n, ctx->in_len - n);
+        ctx->in_pos += n;
         ctx->in_len -= n;
     }
 }
@@ -796,11 +1007,17 @@ int vv_dstream_decompress_chunk(vv_dstream_t *ctx,
                                 uint8_t *dst, size_t dst_cap,
                                 size_t *consumed, size_t *written) {
     if (!ctx || !dst || !consumed || !written) return VV_ERR_PARAM;
+    if (src_len > 0 && !src) return VV_ERR_PARAM;
     *consumed = 0;
     *written = 0;
 
     if (ctx->state == VV_DSTREAM_ERROR) return VV_ERR_CORRUPT;
-    if (ctx->state == VV_DSTREAM_DONE) return 1;
+    if (ctx->state == VV_DSTREAM_DONE) {
+        *written = ctx->output_pos;
+        return 1;
+    }
+    if (ctx->dst_base_saved && dst != ctx->dst_base_saved) return VV_ERR_PARAM;
+    if (ctx->output_pos > dst_cap) return VV_ERR_OVERFLOW;
 
     /* Append new input */
     if (src_len > 0) {
@@ -820,9 +1037,15 @@ int vv_dstream_decompress_chunk(vv_dstream_t *ctx,
     for (;;) {
         if (ctx->state == VV_DSTREAM_HEADER) {
             if (ctx->in_len < sizeof(vv_frame_header_t)) { *written = ctx->output_pos; return VV_OK; }
-            memcpy(&ctx->fh, ctx->in_buf, sizeof(vv_frame_header_t));
+            memcpy(&ctx->fh, ctx->in_buf + ctx->in_pos, sizeof(vv_frame_header_t));
             if (ctx->fh.magic != VV_MAGIC) { ctx->state = VV_DSTREAM_ERROR; return VV_ERR_BAD_MAGIC; }
             if (ctx->fh.version != 1) { ctx->state = VV_DSTREAM_ERROR; return VV_ERR_CORRUPT; }
+            if ((ctx->fh.flags & 0x0Cu) == 0x0Cu) {
+                ctx->state = VV_DSTREAM_ERROR; return VV_ERR_CORRUPT;
+            }
+            if (!frame_max_offset(ctx->fh.window_log, &ctx->max_offset)) {
+                ctx->state = VV_DSTREAM_ERROR; return VV_ERR_CORRUPT;
+            }
             ctx->has_checksum = (ctx->fh.flags & 1);
             ctx->off_bytes = (ctx->fh.window_log > 16) ? 3 : 2;
             dstream_consume(ctx, sizeof(vv_frame_header_t));
@@ -834,13 +1057,14 @@ int vv_dstream_decompress_chunk(vv_dstream_t *ctx,
             if (ctx->in_len < 4) { *written = ctx->output_pos; return VV_OK; }
 
             uint32_t bh_packed;
-            memcpy(&bh_packed, ctx->in_buf, 4);
+            const uint8_t *in = ctx->in_buf + ctx->in_pos;
+            memcpy(&bh_packed, in, 4);
             vv_block_type_t btype = vv_bh_type(bh_packed);
             int is_last = vv_bh_last(bh_packed);
             uint32_t dsz = vv_bh_size(bh_packed);
 
             if (dsz > VV_MAX_BLOCK_SIZE) { ctx->state = VV_DSTREAM_ERROR; return VV_ERR_OVERFLOW; }
-            if ((size_t)(op - dst) + dsz > dst_cap) { ctx->state = VV_DSTREAM_ERROR; return VV_ERR_OVERFLOW; }
+            if ((size_t)dsz > dst_cap - ctx->output_pos) { ctx->state = VV_DSTREAM_ERROR; return VV_ERR_OVERFLOW; }
 
             /* Determine how many bytes this block occupies */
             size_t block_header_sz = 4;
@@ -852,7 +1076,7 @@ int vv_dstream_decompress_chunk(vv_dstream_t *ctx,
                 block_data_sz = 1;
             } else if (btype == VV_BLOCK_COMPRESSED || btype == VV_BLOCK_ENTROPY) {
                 if (ctx->in_len < block_header_sz + 3) { *written = ctx->output_pos; return VV_OK; }
-                const uint8_t *p = ctx->in_buf + block_header_sz;
+                const uint8_t *p = in + block_header_sz;
                 uint32_t csz = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
                 block_data_sz = 3 + csz;
             } else {
@@ -863,7 +1087,7 @@ int vv_dstream_decompress_chunk(vv_dstream_t *ctx,
             if (ctx->in_len < total_block_sz) { *written = ctx->output_pos; return VV_OK; }
 
             /* Decode the block — decoder uses dst_base for match resolution */
-            const uint8_t *p = ctx->in_buf + block_header_sz;
+            const uint8_t *p = in + block_header_sz;
             if (btype == VV_BLOCK_RAW) {
                 memcpy(op, p, dsz);
             } else if (btype == VV_BLOCK_RLE) {
@@ -872,29 +1096,37 @@ int vv_dstream_decompress_chunk(vv_dstream_t *ctx,
                 uint32_t csz = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
                 size_t actual = 0;
                 vv_error_t err = decode_block_tokens(p + 3, csz, op, dsz, &actual,
-                                                      ctx->off_bytes, ctx->dst_base_saved);
+                                                      ctx->off_bytes, ctx->dst_base_saved, ctx->max_offset);
                 if (err != VV_OK || actual != dsz) { ctx->state = VV_DSTREAM_ERROR; return err != VV_OK ? err : VV_ERR_CORRUPT; }
             } else { /* ENTROPY */
                 uint32_t csz = (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16);
+                /* SPRINT 123 (v2.48.5): csz == 0 makes bdata_len underflow
+                 * to SIZE_MAX, causing the entropy decoder to read past
+                 * the input buffer. Found by libFuzzer fuzz_dstream.
+                 * The stateless decoder already has this check at line 631;
+                 * porting it here. */
+                if (csz < 1) { ctx->state = VV_DSTREAM_ERROR; return VV_ERR_CORRUPT; }
                 uint8_t tag = p[3];
                 const uint8_t *bdata = p + 4;
                 size_t bdata_len = csz - 1;
                 size_t actual = 0;
                 vv_error_t err;
                 if (tag == VV_ENTROPY_ANS) {
-                    err = decode_block_ans(bdata, bdata_len, op, dsz, &actual, ctx->off_bytes, ctx->dst_base_saved);
+                    err = decode_block_ans(bdata, bdata_len, op, dsz, &actual, ctx->off_bytes, ctx->dst_base_saved, ctx->max_offset);
                 } else if (tag == VV_ENTROPY_ANS4) {
-                    err = decode_block_ans4(bdata, bdata_len, op, dsz, &actual, ctx->off_bytes, ctx->dst_base_saved);
+                    err = decode_block_ans4(bdata, bdata_len, op, dsz, &actual, ctx->off_bytes, ctx->dst_base_saved, ctx->max_offset);
                 } else if (tag == VV_ENTROPY_CTX) {
-                    err = decode_block_ctx(bdata, bdata_len, op, dsz, &actual, ctx->off_bytes, ctx->dst_base_saved);
+                    err = decode_block_ctx(bdata, bdata_len, op, dsz, &actual, ctx->off_bytes, ctx->dst_base_saved, ctx->max_offset);
                 } else if (tag == VV_ENTROPY_SEQ) {
-                    err = vva_decode_sequences(bdata, bdata_len, op, dsz, &actual, ctx->dst_base_saved);
+                    err = vva_decode_sequences_limited(bdata, bdata_len, op, dsz, &actual,
+                                                       ctx->dst_base_saved, ctx->max_offset);
                     if (err != VV_OK) err = VV_ERR_CORRUPT;
                 } else if (tag == VV_ENTROPY_SEQ_V2) {
-                    err = vva_decode_sequences_v2(bdata, bdata_len, op, dsz, &actual, ctx->dst_base_saved);
+                    err = vva_decode_sequences_v2_limited(bdata, bdata_len, op, dsz, &actual,
+                                                          ctx->dst_base_saved, ctx->max_offset);
                     if (err != VV_OK) err = VV_ERR_CORRUPT;
                 } else if (tag == VV_ENTROPY_HUFFMAN) {
-                    err = decode_block_huffman(bdata, bdata_len, op, dsz, &actual, ctx->off_bytes, ctx->dst_base_saved);
+                    err = decode_block_huffman(bdata, bdata_len, op, dsz, &actual, ctx->off_bytes, ctx->dst_base_saved, ctx->max_offset);
                 } else {
                     ctx->state = VV_DSTREAM_ERROR; return VV_ERR_CORRUPT;
                 }
@@ -911,19 +1143,20 @@ int vv_dstream_decompress_chunk(vv_dstream_t *ctx,
             dstream_consume(ctx, total_block_sz);
 
             if (is_last) {
-                ctx->state = ctx->has_checksum ? VV_DSTREAM_FOOTER : VV_DSTREAM_DONE;
+                if (ctx->has_checksum) ctx->state = VV_DSTREAM_FOOTER;
+                else dstream_finish(ctx);
             }
         }
 
         if (ctx->state == VV_DSTREAM_FOOTER) {
             if (ctx->in_len < sizeof(vv_frame_footer_t)) { *written = ctx->output_pos; return VV_OK; }
             vv_frame_footer_t ff;
-            memcpy(&ff, ctx->in_buf, sizeof(ff));
+            memcpy(&ff, ctx->in_buf + ctx->in_pos, sizeof(ff));
             if (ff.footer_magic != 0x56564E44u) { ctx->state = VV_DSTREAM_ERROR; return VV_ERR_CORRUPT; }
             uint64_t computed = vv_xxh64_finalize(&ctx->cks);
             if (computed != ff.checksum) { ctx->state = VV_DSTREAM_ERROR; return VV_ERR_CORRUPT; }
             dstream_consume(ctx, sizeof(vv_frame_footer_t));
-            ctx->state = VV_DSTREAM_DONE;
+            dstream_finish(ctx);
         }
 
         if (ctx->state == VV_DSTREAM_DONE) {

@@ -2,14 +2,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
 # Copyright (c) 2026 Cristian Cezar Moisés
 # Build libvuptsdk SRPM tarball.
-# Produces: /tmp/libvuptsdk-2.0.0.srpm.tar.gz containing:
-#           SPECS/libvuptsdk.spec  + SOURCES/libvuptsdk-2.0.0.tar.gz
+# Produces a versioned SRPM-equivalent tarball containing the generated spec
+# and deterministic source archive.
 # 
 # To build the actual RPM on a system with rpmbuild:
 #   tar xzf libvuptsdk-2.0.0.srpm.tar.gz
 #   rpmbuild -bb SPECS/libvuptsdk.spec
 set -e
 cd "$(dirname "$0")/.."
+
+echo "error: RPM runtime packaging is disabled for this source revision." >&2
+echo "The tracked full-ABI prebuilt is frozen and does not contain codec 2.65.11." >&2
+echo "Regenerate and re-audit the full library from complete source before packaging." >&2
+exit 2
 
 # Derive the version from the Makefile (single source of truth) unless overridden.
 VERSION="${VERSION:-$(make -s printversion)}"
@@ -70,8 +75,8 @@ make install DESTDIR=%{buildroot} PREFIX=/usr LIBDIR=/usr/%{_lib}
 %files
 /usr/%{_lib}/libvuptsdk.so.%{version}
 /usr/%{_lib}/libvuptsdk.so.%{soversion}
-%doc README.md CHANGELOG.md SECURITY.md
-%license LICENSE
+%doc README.md README.pt-BR.md CHANGELOG.md SECURITY.md NOTICE
+%license LICENSE LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL
 
 %files devel
 /usr/%{_lib}/libvuptsdk.so

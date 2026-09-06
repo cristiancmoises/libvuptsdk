@@ -2,10 +2,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
 # Copyright (c) 2026 Cristian Cezar Moisés
 # Build libvuptsdk Debian package.
-# Produces: /tmp/libvuptsdk_2.0.0_amd64.deb
-#           /tmp/libvuptsdk-dev_2.0.0_amd64.deb
+# Produces versioned runtime and development packages under /tmp.
 set -e
 cd "$(dirname "$0")/.."
+
+echo "error: Debian runtime packaging is disabled for this source revision." >&2
+echo "The tracked full-ABI prebuilt is frozen and does not contain codec 2.65.11." >&2
+echo "Regenerate and re-audit the full library from complete source before packaging." >&2
+exit 2
 
 # Derive the version from the Makefile (single source of truth) unless the
 # caller overrides it, so packages can never be silently mislabeled on a bump.
@@ -43,8 +47,11 @@ ln -sf "libvuptsdk.so.${VERSION}" \
 
 install -m 0644 LICENSE       "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/copyright"
 install -m 0644 README.md     "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/README.md"
+install -m 0644 README.pt-BR.md "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/README.pt-BR.md"
 install -m 0644 CHANGELOG.md  "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/CHANGELOG.md"
 install -m 0644 SECURITY.md   "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/SECURITY.md"
+install -m 0644 LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL NOTICE \
+    "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/"
 
 INSTALLED_SIZE=$(du -sk "$PKG_RT" | cut -f1)
 cat > "$PKG_RT/DEBIAN/control" <<EOF
@@ -124,7 +131,10 @@ chmod 0644 "$PKG_DEV/usr/lib/x86_64-linux-gnu/pkgconfig/vuptsdk.pc"
 
 install -m 0644 LICENSE       "$PKG_DEV/usr/share/doc/libvuptsdk-dev/copyright"
 install -m 0644 README.md     "$PKG_DEV/usr/share/doc/libvuptsdk-dev/README.md"
+install -m 0644 README.pt-BR.md "$PKG_DEV/usr/share/doc/libvuptsdk-dev/README.pt-BR.md"
 install -m 0644 AUDIT.md      "$PKG_DEV/usr/share/doc/libvuptsdk-dev/AUDIT.md"
+install -m 0644 LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL NOTICE \
+    "$PKG_DEV/usr/share/doc/libvuptsdk-dev/"
 
 INSTALLED_SIZE_DEV=$(du -sk "$PKG_DEV" | cut -f1)
 cat > "$PKG_DEV/DEBIAN/control" <<EOF
