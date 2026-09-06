@@ -1,6 +1,6 @@
 # libvuptsdk audit report
 
-**Version**: 2.0.3 (plus unreleased codec 2.65.11 integration)
+**Version**: 2.0.4-base.1 prerelease (VaptVupt codec 2.65.11)
 **Original audit date**: 2026-04-29
 
 **Current integration update**: 2026-09-06
@@ -14,18 +14,22 @@ remains as open items. It is updated when the evidence changes.
 
 ## TL;DR — verification inventory
 
-The source-build, codec, sanitizer, license, distribution, and GCC warning
-rows were rerun for the 2026-09-06 integration. Other dated cryptographic,
-fuzz, binding, cross-build, install, and full-prebuilt results are retained
-historical evidence and were not rerun by this codec update.
+The source build, codec, sanitizer, license, distribution, GCC/Clang warning,
+ML-KEM conformance, Debian/RPM build and frozen-prebuilt smoke rows were rerun
+on 2026-09-06. Older fuzz, binding, cross-architecture and performance rows are
+retained as historical evidence and are not attributed to this prerelease.
 
 | Aspect | Status | Evidence |
 |---|---|---|
-| Source build (subset) — buildable from this repo | ✓ | `make base` produces `libvuptsdk-base.so.2.0.3`, 55 public symbols |
+| Source build (subset) — buildable from this repo | ✓ | `make` produces `libvuptsdk-base.so.2.0.4`, 56 public symbols |
 | Frozen full-ABI prebuilt | Historical artifact | 68 symbols including `easy_*` v2.1 layer; current source changes absent |
-| Frozen-prebuilt smoke and symbol audit | BLOCKED locally | `make test` cannot link here because `libargon2.so.1` and `libcrypto.so.3` are unavailable; prior results below are historical |
-| ASAN/UBSAN source smoke test | ✓ 6/6 | `make test-asan` |
+| Frozen-prebuilt smoke and symbol audit | ✓ 10/10 + 13/13 | `make legacy-test` with explicit OpenSSL 3.5.7 and Argon2 20190702 runtime paths |
+| Source public smoke test | ✓ 12/12 | Failure-output, malformed-solid, plain, password, hybrid-key, metadata, output-limit and private-key policy checks |
+| ASAN/UBSAN source smoke test | ✓ 12/12 | `make test-asan`; codec gate also 57/57 |
 | Embedded VaptVupt 2.65.11 serial/parallel gate | ✓ 57/57 | `tests/codec_integration_test.c` |
+| ML-KEM ACVP | ✓ 80/80 | `conformance-suite/run_kats.py` |
+| ML-KEM differential vs kyber-py 1.2.0 | ✓ 100/100 each direction | `differential_kyberpy.py` |
+| ML-KEM differential vs RustCrypto ml-kem 0.2.3 | ✓ 100/100 each direction | pinned Cargo lock plus `differential_rustcrypto.py` |
 | ASAN stress (10× repeated runs, no flakes) | ✓ 10/10 | this audit |
 | Tamper fuzz, single-bit flip × 1000 | ✓ 1000/1000 detected | tools/tamper_fuzz |
 | Tamper fuzz, multi-byte × 10000 | ✓ 9991/10000 detected, 0 undetected | tools/tamper_fuzz_multi |
@@ -35,26 +39,26 @@ historical evidence and were not rerun by this codec update.
 | **NEW Key-isolation test, 1293 secrets × 100 cts** | ✓ 0 leaks in 129,300 trials | tools/key_isolation |
 | **NEW Hardening audit (ELF properties)** | ✓ Source = Full RELRO; ⚠ Prebuilt = Partial RELRO | tools/checksec_lib.sh |
 | **NEW Performance benchmarks** | ✓ Reproducible | bench/bench_throughput |
-| Per-file license audit (SDK and embedded codec scopes) | ✓ 96 files | `make audit-licenses` |
+| Per-file license audit (SDK and embedded codec scopes) | ✓ 97 files | `make audit-licenses` |
 | C++17 ABI compatibility | ✓ | All 9 public headers compile with g++ |
 | Cross-compile to AArch64 (arch detection) | ✓ | `$(CC) -dumpmachine` → NEON SIMD |
-| Hermetic dist tarball (deterministic SHA) | ✓ | `make dist` produces same SHA across runs |
-| `make install` end-to-end with custom PREFIX | ✓ | pkg-config respects install-time PREFIX |
+| Hermetic base tarball | ✓ | Repeated archive hashes match; extracted archive passes full source gate; no prebuilt, bindings, prompt files or build target directory |
+| Debian 12 package install | ✓ | Runtime + development packages install together; pkg-config builds and runs `doc/example.c` |
+| RPM/SRPM package build | ✓ | Runtime, devel and source packages build from the deterministic tarball; `%check` passes 12 + 57 checks |
 | **NEW `make install` strips debug info** | ✓ | 721 KiB → 151 KiB |
 | Python bindings test suite (13 properties) | ✓ 13/13 | `python3 tests/test_python.py` |
-| Compiler warnings (`-Wpedantic`, `-Werror`) on current source build | ✓ Zero | GCC; Clang was unavailable in the recorded environment |
+| Compiler warnings (`-Wpedantic`, `-Werror`) on current source build | ✓ Zero | GCC 16.1.0 and Clang 22.1.8 |
 | External independent crypto audit | ✗ Pending | budget required |
 | `zuptsdk_easy_*` source open-sourced | ✗ Pending | only binary audited |
 | **OPEN canonical prebuilt missing BIND_NOW (Partial RELRO)** | ⚠ Tracked | rebuild prebuilt with `-Wl,-z,now` |
 
-**Bottom line for this unreleased integration**: the source-built ABI subset,
-its 57-check codec gate, scoped license audit, GCC warning gate, and
-ASan/UBSan run pass. The frozen full-ABI binary does not contain these changes
-and its legacy smoke test is blocked in the recorded local environment by two
-missing runtime libraries. The broader cryptographic and fuzz results below
-belong to the earlier internal audit; they were not rerun by this codec sync
-and are not an independent audit. A complete release still requires the
-missing full-ABI source, a rebuilt artifact, target tests, and external review.
+**Bottom line for this prerelease**: the source-built base surface, 57-check
+codec gate, 80 ACVP checks, two 100/100 bidirectional differentials, scoped
+license audit, GCC/Clang warning gates, ASan/UBSan run, deterministic source
+archive and native-package build/install checks pass. This supports a clearly
+labeled base prerelease. It does not make the frozen full-ABI binary current,
+turn internal testing into an independent audit, or establish Windows/macOS,
+disk-restore, callback-notification or cross-architecture runtime coverage.
 
 ---
 
@@ -135,15 +139,18 @@ Wrong ACCEPTED:    0 <- must be 0
 
 ### Test 4 — ASAN/UBSAN repeated runs
 
-**Hypothesis**: the from-source build is memory-safe across repeated
-invocations under the strictest sanitizer configuration.
+**Hypothesis**: the from-source build is free of sanitizer findings across
+repeated invocations under the release sanitizer configuration.
 
-**Method**: Build `libvuptsdk-base.so.2.0.3` with
-`-fsanitize=address,undefined -fno-omit-frame-pointer`. Build the smoke test
-binary against it. Run 10 times with `ASAN_OPTIONS=detect_leaks=1`. Pass
-criterion: every run exits 0 with no ASAN warning.
+**Current method**: Build `libvuptsdk-base.so.2.0.4` and both focused test
+binaries with `-fsanitize=address,undefined -fno-omit-frame-pointer`. Run the
+12-check public smoke gate and the 57-check embedded-codec gate with bounded
+resources. Leak detection is disabled for this combined ASan/UBSan invocation.
 
-**Result**: **10/10 PASS** — zero leaks, zero out-of-bounds, zero UB.
+**Current result**: **12/12 SDK checks and 57/57 codec checks PASS** with no
+AddressSanitizer or UndefinedBehaviorSanitizer finding. The older 10-run stress
+result elsewhere in this report is historical evidence, not a rerun of the
+2.0.4-base.1 candidate.
 
 ### Test 5 — License coverage audit
 
@@ -156,7 +163,7 @@ that applies to its documented licensing scope.
 AGPL/commercial-option identifier. The synchronized VaptVupt core must retain
 `GPL-3.0-or-later`; the combined integration test is `AGPL-3.0-or-later`.
 
-**Result**: **96 / 96 files PASS.** The codec identifiers match upstream
+**Result**: **97 / 97 files PASS.** The codec identifiers match upstream
 vaptvupt-codec 2.65.11, and the complete GPLv3 text ships as
 `LICENSE-GPL-3.0`.
 
@@ -166,16 +173,16 @@ vaptvupt-codec 2.65.11, and the complete GPLv3 text ships as
 internal `zupt_*`, `vv_*`, or static-helper symbols are visible to
 downstream linkers.
 
-**Method**: `nm -D --defined-only build/libvuptsdk-base.so.2.0.3 | grep ' T '`
+**Method**: `nm -D --defined-only build/libvuptsdk-base.so.2.0.4 | grep ' T '`
 should produce only `zuptsdk_*`-prefixed symbols, all tagged
-`@@ZUPTSDK_1.0`.
+`@@ZUPTSDK_1.0` or the additive `@@ZUPTSDK_1.1` tag.
 
 **Result**:
 
 ```
-Total exported symbols: 55
-All in zuptsdk_* namespace: yes (55/55)
-All tagged @@ZUPTSDK_1.0: yes (55/55)
+Total exported symbols: 56
+All in zuptsdk_* namespace: yes (56/56)
+Version tags: ZUPTSDK_1.0 and ZUPTSDK_1.1
 Internal leakage (zupt_*, vv_*): 0
 ```
 
@@ -267,7 +274,7 @@ RPATH, no dangerous symbols).
 **Method**: see `tools/checksec_lib.sh`. Inspects ELF headers, dynamic
 sections, and dynamic symbol table.
 
-**Result for source build (`build/libvuptsdk-base.so.2.0.3`)**:
+**Result for source build (`build/libvuptsdk-base.so.2.0.4`)**:
 
 ```
 ELF type:           DYN  ✓ PIE/PIC
@@ -276,7 +283,7 @@ RELRO:              ✓ PASS - Full RELRO (read-only GOT)
 Stack canary:       ✓ PASS - canaries present
 FORTIFY_SOURCE:     ✓ PASS - 7 _chk symbols
 RPATH/RUNPATH:      ✓ PASS - none set
-Symbol versions:    ✓ 1 ABI versions (@@ZUPTSDK_1.0)
+Symbol versions:    ✓ 2 ABI versions (@@ZUPTSDK_1.0, @@ZUPTSDK_1.1)
 Dangerous symbols:  ✓ PASS - none of gets/system/exec* used
 ```
 
@@ -299,13 +306,14 @@ Stripped (after install): 721 KiB → 151 KiB ✓
    in isolation, but reduces exploit difficulty for any future
    memory-corruption vulnerability). **Tracked as next-minor fix**;
    recommendation: rebuild prebuilt with `-Wl,-z,relro,-z,now`.
-3. **`make install` now strips debug info** — cuts installed library
-   size from 721 KiB to 151 KiB and removes information disclosure.
+3. **`make install` strips debug info** — the Debian 12 release build is
+   1,085,024 bytes before stripping and 223,280 bytes in the generic binary
+   bundle. Debug information remains available in the build tree.
 
 ### Test 11 — Performance characterization (NEW)
 
 **Hypothesis**: the library's measured performance matches the cost model
-documented in [BENCHMARKS.md](../BENCHMARKS.md).
+documented in [BENCHMARKS.md](BENCHMARKS.md).
 
 **Method**: see `bench/bench_throughput.c`. Measures latency (median +
 p99) and throughput (sustained MB/s) for all major operations.
@@ -334,8 +342,11 @@ p99) and throughput (sustained MB/s) for all major operations.
 
 ## Cryptographic construction verification
 
-The hybrid KEM construction is implemented per the diagram in
-[`SECURITY.md`](SECURITY.md#hybrid-kem-public-key-mode). Each component:
+The HKDF/key-commitment/XChaCha construction described below belongs to the
+frozen full-ABI binary. Its complete implementation source is missing from
+this repository, so these are historical test records rather than a current
+source-review claim. The source-built base archive uses the separate legacy
+construction described in `SECURITY.md`.
 
 ### KEM correctness — ML-KEM-768
 
@@ -356,7 +367,7 @@ The hybrid KEM construction is implemented per the diagram in
 | Interop (independent impls) | differential vs kyber-py 1.2.0 & RustCrypto `ml-kem` 0.2.3, both directions | ✓ |
 | Implicit rejection (FO transform) | 1000/1000 tampered-ciphertext rejections; ACVP decaps VAL vectors | ✓ |
 | Shared secret length = 32 bytes | API contract, asserted in self-test | ✓ |
-| Constant-time decaps | dudect + ctgrind (`CT_VERIFICATION.md`); cmov select `jasmin/zupt_mlkem_select.jazz` | ✓ |
+| Timing-leakage evidence for decaps | dudect + ctgrind (`CT_VERIFICATION.md`) on x86-64 | no finding in recorded runs; not a proof |
 
 ### ECDH correctness — X25519
 
@@ -369,18 +380,16 @@ The hybrid KEM construction is implemented per the diagram in
 
 ### Combiner — HKDF-SHA3-256
 
-The shared secret derivation uses HKDF-Extract over `(ek_kem || ss_ecdh)`
-with the public-key context as salt. Bindel-Brendel-Fischlin-Goncalves 2019
-proves: if either underlying primitive is secure, the resulting hybrid
-shared secret is uniform. Verified property: the output of HKDF-Extract is
-indistinguishable from random as long as either ML-KEM-768 or X25519 holds.
+The recorded design uses HKDF-Extract over `(ek_kem || ss_ecdh)` with the
+public-key context as salt. This release did not re-establish its reduction or
+inspect the missing full-ABI implementation.
 
 ### AEAD — XChaCha20-Poly1305 (default)
 
 | Property | Verified by | Result |
 |---|---|---|
 | RFC 8439 KAT | embedded test vectors | ✓ |
-| 192-bit nonce → no nonce reuse risk | random sampling of 24 bytes | ✓ |
+| 192-bit random nonce | sampling exercised by historical tests; collision risk is not zero | historical |
 | Polynomial MAC verifies | round-trip + tamper tests above | ✓ 10000+/10000+ detected |
 
 ### Key commitment — BLAKE2b-MAC
@@ -391,22 +400,22 @@ This defeats the multi-key partitioning attacks documented in Albertini et
 al. 2022, where a single ciphertext could decrypt to two different
 plaintexts under two different keys.
 
-**Verified**: every decrypt path validates `commit` before returning
-plaintext. Tampering with the commit byte is detected by the AEAD MAC step
-that follows.
+Historical black-box tests rejected a modified commitment. Without the
+complete source, this release does not claim that every full-ABI return path
+was reviewed.
 
 ### Password KDF — Argon2id
 
-Parameters: `m=64MB, t=3, p=1` (RFC 9106 IETF recommendation). One encrypt
-or decrypt operation takes ~250 ms on a modern desktop, providing
-significant ASIC/GPU resistance. Verified by:
+The frozen full-ABI password API records project-selected parameters of
+`m=64 MiB, t=3, p=1`. They are not the exact RFC 9106 recommended profile,
+and latency depends on the host. Historical checks include:
 
 - RFC 9106 test vectors (`zsdk_argon2id_self_test`)
 - Round-trip + wrong-password tests (smoke + Python suite)
 
 ---
 
-## Constant-time primitives (Jasmin verification)
+## Optional Jasmin sources (historical record)
 
 | Primitive | Source | Verifier output |
 |---|---|---|
@@ -416,16 +425,14 @@ significant ASIC/GPU resistance. Verified by:
 | ML-KEM cmov-style select | `jasmin/zupt_mlkem_select.jazz` | "Constant Time" |
 | X25519 field cswap | `jasmin/zupt_x25519_fe.jazz` | "Constant Time" |
 
-Compiled with `jasminc 2026.03.0`. The Jasmin type system formally proves
-that no operation in these primitives has data-dependent timing. The
-compiled `.s` files preserve this property through the assembly-generation
-phase.
+The repository records a `jasminc 2026.03.0` generation run, but the exact
+compiler/type-checking invocation and output were not reproduced for this
+candidate. The default base build does not link these assembly objects. The
+current release therefore treats the table as historical provenance, not a
+new formal-verification result.
 
-The non-CT-critical surrounding code (key schedule setup, format parsing,
-heap allocation) is **not** Jasmin-verified — it operates on data whose
-timing leakage does not affect cryptographic security (per public-key
-cryptography conventions where padding/format takes pre-key-derivation
-operations).
+Key scheduling, format parsing and allocation are outside the recorded Jasmin
+inventory and were not formally assessed for timing behavior.
 
 ---
 
@@ -435,24 +442,24 @@ Beyond the cryptographic primitives, libvuptsdk implements:
 
 | Measure | Implementation | Verified |
 |---|---|---|
-| `mlock()` on private-key buffers | `src/zupt_mlock.c` | yes |
+| Best-effort `mlock()` on private-key buffers | `src/zupt_mlock.c` | attempted; OS limits may reject it |
 | Explicit `zupt_secure_zero()` on free | every key path | yes (smoke test 4) |
 | Stack canary protection | `-fstack-protector-strong` | yes (compiler flag) |
 | RELRO + BIND_NOW | `-Wl,-z,relro,-z,now` | yes (compiler flag) |
 | PIC + ASLR | `-fPIC -shared` | yes (compiler flag) |
 | FORTIFY_SOURCE | `-D_FORTIFY_SOURCE=2` | yes |
 | No `gets`/`strcpy`/`sprintf` | grep + audit | yes (0 occurrences) |
-| Bounded length-prefix parsing | every parse path | yes (audit) |
-| Constant-time MAC compare | Jasmin-verified `zupt_mac_verify.jazz` | yes |
+| Bounded length-prefix parsing | focused archive paths | current tests pass; not a proof |
+| Full-byte MAC comparison | portable implementation | dynamic timing evidence only |
 | Anti-fault decapsulation | re-encrypts and checks vs ciphertext | yes |
 
 ---
 
-## Inherited from zupt 2.x audit campaign
+## Historical results inherited from the Zupt audit campaign
 
-The libvuptsdk source tree is identical (modulo file paths) to the audited
-SDK source tree from the zupt repository. The following was verified there
-and is still verified here:
+The following results were recorded in the earlier Zupt/SDK audit campaign.
+The current tree has since diverged, so these rows provide history and are not
+substitutes for the current-candidate rows at the top of this report:
 
 | Audit campaign | Tests | Fuzz iters | Result |
 |---|---|---|---|
@@ -493,20 +500,15 @@ not a replacement full-ABI release while these remain open.
 1. **Open-source `zuptsdk_easy_*` implementations** — currently in binary
    form only in `prebuilt/libvuptsdk.so.2.0.3`. Tracked as the top open
    item.
-2. **External independent cryptographic audit** — budget required (~$30-60k
-   range with reputable firms like Trail of Bits, NCC Group, or Cure53).
+2. **External independent cryptographic audit** — not yet commissioned.
 3. **libFuzzer / AFL++ integration** — current fuzz is internal mutation
    fuzzer; structure-aware fuzzing would be more thorough on the parse
    paths.
-4. **AArch64 prebuilt binary** — only x86_64 ships prebuilt today. Source
-   build works on AArch64 (verified by `$(CC) -dumpmachine` arch
-   detection); only the canonical binary is missing.
-5. **Win32 / macOS prebuilts** — only Linux currently. Source builds on
-   macOS clang (untested in this sandbox); Win32 needs MSVC or MinGW build
-   script.
-6. **ML-KEM-1024 variant** — for users needing 256-bit security against
-   quantum adversaries. Currently only ML-KEM-768 (192-bit classical /
-   96-bit quantum) is offered.
+4. **AArch64 runtime validation** — the build selects its AArch64/NEON flags,
+   but this candidate has not run on AArch64 hardware or a VM.
+5. **Win32 / macOS validation and packages** — not run for this candidate.
+6. **ML-KEM-1024 variant** — currently only the NIST category-3 ML-KEM-768
+   parameter set is offered.
 7. **HSM / TPM integration** — for key generation in non-software isolation
    domains.
 

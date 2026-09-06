@@ -1,81 +1,82 @@
 # libvuptsdk
 
 [![License: AGPL-3.0+](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
-[![ABI: ZUPTSDK_2.1](https://img.shields.io/badge/ABI-ZUPTSDK__2.1-green.svg)](zuptsdk.map)
+[![Base ABI: ZUPTSDK_1.1](https://img.shields.io/badge/Base%20ABI-ZUPTSDK__1.1-green.svg)](zuptsdk.map)
 
 [Português do Brasil](README.pt-BR.md)
 
-**Post-quantum hybrid cryptography for C, C++, Python, Node.js, Go, and Rust applications.**
+**A source-built C archive SDK using VaptVupt codec 2.65.11.**
 
-`libvuptsdk` provides the cryptographic and archive ABI used by client
-applications. **Zupt is an existing, separate consumer and retains its name.**
-The broader [VaptVupt](https://git.securityops.co/cristiancmoises/vaptvupt)
-application is related, but is not interchangeable with Zupt, this SDK, or the
-standalone codec. Applications can also link against the documented C ABI.
+`libvuptsdk-base` is the reproducible part of the SDK: archive creation,
+verification and extraction plus the current VaptVupt codec. **Zupt is a
+separate consumer and retains its name.** The broader
+[VaptVupt](https://git.securityops.co/cristiancmoises/vaptvupt) application,
+Zupt, this SDK and the standalone codec are distinct projects.
 
 > **Canonical repository:** [`git.securityops.co/cristiancmoises/libvuptsdk`](https://git.securityops.co/cristiancmoises/libvuptsdk), mirrored to [GitHub](https://github.com/cristiancmoises/libvuptsdk), [Codeberg](https://codeberg.org/berkeley/libvuptsdk), and [git.securityops.com.br](https://git.securityops.com.br/cristiancmoises/libvuptsdk). See [Repositories & related projects](#repositories--related-projects).
 
-## Why libvuptsdk?
+## Release boundary
 
-| Concern | What libvuptsdk gives you |
-|---|---|
-| **Quantum-safe** | ML-KEM-768 (FIPS 203, NIST 2024-standardized) hybrid with X25519 ECDH. Both must fall to break a message. The from-source KEM is verified conformant against the official NIST ACVP vectors (**80/80**) and two independent implementations — see [ML-KEM-768 conformance](#ml-kem-768-conformance-status). |
-| **Misuse-resistant** | Default AEAD (XChaCha20-Poly1305) uses random 24-byte nonces — no nonce-reuse risk. AES-256-SIV available for nonce-misuse-resistant mode. |
-| **Committing AEAD** | BLAKE2b key-commitment defeats the multi-key partitioning attacks that affect raw AEAD constructions (Albertini et al. 2022). |
-| **Constant-time** | Critical primitives (AES, X25519, MAC compare, ML-KEM cmov-select) are written in [Jasmin](https://github.com/jasmin-lang/jasmin) and verified constant-time by the type system. |
-| **Forward secrecy** | Per-archive ephemeral KEM session — past traffic stays protected even if long-term keys leak later. |
-| **Memory-hardened** | `mlock()` on private keys, explicit zeroization on free, RELRO, BIND_NOW, stack canaries, FORTIFY_SOURCE. |
-| **Stable C ABI** | Symbol-versioned (`ZUPTSDK_1.0`, `ZUPTSDK_2.1`) with compatibility preserved across compatible 2.x releases. |
-| **Multi-language** | Native bindings: Python, Node.js, Go, Rust, C, C++. |
+| Artifact | Version | Built from this tree | Intended use |
+|---|---:|---:|---|
+| `libvuptsdk-base.so` / `.a` | **2.0.4-base.1** | Yes | Current archive API and VaptVupt 2.65.11 |
+| `libvuptsdk.so` in `prebuilt/` | **2.0.3** | No | Frozen x86-64 compatibility testing only |
 
-## Existing frozen 2.0.3 packages
+The full 2.0.3 binary contains `easy_*`, metrics and streaming-crypto symbols
+whose source is not present in this repository. It does not contain the new
+codec and is not installed, packaged or attached to the base release. Do not
+rename it or infer source-level fixes from it.
 
-> These commands refer to the previously built full-ABI 2.0.3 artifacts. They
-> do not contain codec 2.65.11. Creating replacement runtime packages is
-> blocked until the complete library can be rebuilt and re-audited.
+`2.0.4-base.1` is intentionally a prerelease while the narrower source API and
+its packaging receive downstream testing. It does not claim to replace the
+frozen full ABI.
 
-### Debian / Ubuntu / Mint
+## Build, test and install
 
-```bash
-sudo apt install ./libvuptsdk2_2.0.3_amd64.deb ./libvuptsdk-dev_2.0.3_amd64.deb
+Requirements are a C11 compiler, GNU Make, binutils and pthread support.
+
+```sh
+make
+make test
+make test-asan
+sudo make install
 ```
 
-### Fedora / RHEL / openSUSE
+The installation is parallel-safe with the legacy SDK: the library is named
+`libvuptsdk-base`, its header is installed below
+`include/libvuptsdk-base/`, and its pkg-config module is `vuptsdk-base`.
 
-```bash
-tar -xzf libvuptsdk-2.0.3.srpm.tar.gz
-rpmbuild -bb SPECS/libvuptsdk.spec
-sudo rpm -i ~/rpmbuild/RPMS/x86_64/libvuptsdk-2.0.3-*.rpm
+```sh
+cc app.c $(pkg-config --cflags --libs vuptsdk-base) -o app
+pkg-config --modversion vuptsdk-base   # 2.0.4-base.1
 ```
 
-### From source
+Create the deterministic source archive or native package candidates with:
 
-```bash
-tar -xzf libvuptsdk-2.0.3-codec-2.65.11-unreleased-source.tar.gz
-cd libvuptsdk-2.0.3-codec-2.65.11-unreleased-source
-make base
-make test-source
+```sh
+make dist
+packaging/build-deb.sh
+packaging/build-rpm.sh
 ```
 
-The source archive deliberately excludes the frozen full-ABI prebuilt. It
-builds `libvuptsdk-base.so` and `libvuptsdk-base.a`; it does not provide a
-current replacement for the complete `libvuptsdk.so` or an installable runtime
-package.
-
-Verify a separately installed frozen package:
-
-```bash
-pkg-config --modversion vuptsdk    # → 2.0.3
-echo '#include <zuptsdk.h>
-int main(){printf("%s\n",zuptsdk_version_string());}' \
-  | cc -x c - $(pkg-config --cflags --libs vuptsdk) -o /tmp/v && /tmp/v
-```
+The Debian package names are `libvuptsdk-base2` and
+`libvuptsdk-base-dev`; RPM uses `libvuptsdk-base` and
+`libvuptsdk-base-devel`. The packaging scripts reject shared objects
+containing an RPATH/RUNPATH. Published package files are unsigned release
+assets, not an OS vendor repository; verify them with the accompanying
+`SHA256SUMS`.
 
 ---
 
-# Tutorial: a 60-second tour
+# Legacy full-ABI 2.0.3 reference
 
-This 5-step tutorial covers public-key encryption, password mode, field encryption, file encryption, and tamper detection. The examples are shipped as runnable code in [`doc/examples/`](doc/examples/); validate them against the exact full-ABI library selected for deployment.
+> The tutorials and language bindings below target the frozen
+> `libvuptsdk.so.2.0.3`. They are retained for existing consumers and are not
+> provided by the source-built base packages.
+
+## Tutorial: a 60-second tour
+
+This 5-step tutorial covers public-key encryption, password mode, field encryption, file encryption, and tamper detection. The snippets are illustrative; validate them against the exact frozen full-ABI library selected for an existing deployment.
 
 ## Step 1 — Generate a keypair
 
@@ -100,7 +101,7 @@ zuptsdk_easy_encrypt("alice.pub",
                       (const uint8_t *)plaintext, strlen(plaintext),
                       &ciphertext, &ct_len);
 /* … send ciphertext (ct_len bytes) to Alice … */
-free(ciphertext);   /* release the heap buffer */
+zuptsdk_free(ciphertext);   /* release with the SDK allocator */
 ```
 
 ## Step 3 — Alice decrypts with her private key
@@ -118,7 +119,7 @@ if (rc != 0) {
     return 1;
 }
 /* Use recovered[0 .. rec_len-1] */
-free(recovered);
+zuptsdk_free(recovered);
 ```
 
 ## Step 4 — Password mode (no keypair needed)
@@ -139,7 +140,8 @@ uint8_t *plain = NULL; size_t plain_sz = 0;
 zuptsdk_easy_decrypt_password(password, blob, blob_sz, &plain, &plain_sz);
 ```
 
-The KDF is Argon2id (memory-hard, RFC 9106 IETF-recommended parameters: 64 MB, t=3, p=1). One encrypt or decrypt call takes ~250 ms on a modern desktop.
+The frozen binary uses Argon2id with a 64 MiB memory cost, three iterations and
+one lane. Latency is machine-dependent; measure it on the deployment target.
 
 ## Step 5 — Field-level encryption (DB columns / JSON)
 
@@ -158,7 +160,7 @@ zuptsdk_easy_encrypt_field(master_key, "alice@example.com", &email_ct);
 char *email_pt = NULL;
 zuptsdk_easy_decrypt_field(master_key, email_ct, &email_pt);
 
-free(email_ct); free(email_pt);
+zuptsdk_free(email_ct); zuptsdk_free(email_pt);
 zuptsdk_secure_zero(master_key, sizeof(master_key));
 ```
 
@@ -166,7 +168,8 @@ zuptsdk_secure_zero(master_key, sizeof(master_key));
 
 # Language bindings
 
-All bindings are tested against the canonical `libvuptsdk.so.2` and live in [`bindings/`](bindings/).
+The historical bindings target the frozen `libvuptsdk.so.2` and live in
+[`bindings/`](bindings/). They were not rerun for this base prerelease.
 
 ## Python
 
@@ -202,7 +205,8 @@ except vuptsdk.ZuptError as e:
 
 **Install**: copy [`bindings/python/vuptsdk.py`](bindings/python/vuptsdk.py) into your project. Pure ctypes, zero pip dependencies. Tested with Python 3.8+.
 
-**Test suite**: 13 properties, all passing. Run with:
+**Historical test suite**: 13 properties were recorded as passing for the
+frozen library. Rerun it against the exact compatibility binary in use:
 
 ```bash
 PYTHONPATH=bindings/python python3 tests/test_python.py
@@ -342,8 +346,7 @@ g++ -std=c++17 myapp.cpp $(pkg-config --cflags --libs vuptsdk) -o myapp
 #include <zuptsdk_easy.h>
 
 int main(void) {
-    /* see Step 1-5 tutorial above; full example in
-       doc/examples/01_pq_keypair.c */
+    /* See the legacy Step 1-5 tutorial above. */
 }
 ```
 
@@ -359,7 +362,8 @@ cc myapp.c $(pkg-config --cflags --libs vuptsdk) -o myapp
 
 ## Public API: convenience layer (`zuptsdk_easy.h`)
 
-Recommended for **application developers**. The `easy_*` API hides ABI complexity behind 11 simple functions.
+This legacy convenience layer is available only in the frozen full-ABI binary.
+It is not shipped by the base packages.
 
 | Function | Purpose |
 |---|---|
@@ -395,12 +399,13 @@ All functions return `0` on success, non-zero on failure. Use `zuptsdk_strerror(
 | Code | Meaning |
 |---|---|
 | 0 | success |
-| -1 | generic error (see `zuptsdk_last_error_detail()`) |
-| -2 | invalid argument |
+| -1 | invalid argument |
+| -2 | out of memory |
 | -3 | I/O error (file not found, permission denied) |
-| -4 | out of memory |
-| -10 | authentication failure (MAC reject — tampered or wrong key) |
-| -11 | format error (not a libvuptsdk blob, or version too new) |
+| -4 | malformed or truncated archive |
+| -5 | password authentication failure |
+| -7 | MAC mismatch (tampered input or wrong key) |
+| -8 | unsupported archive version |
 
 The authoritative code list is `zuptsdk_error_t` in [`include/zuptsdk.h`](include/zuptsdk.h). Note there is **no** distinct "KEM decapsulation failure" code: ML-KEM-768 uses FIPS 203 implicit rejection, so a wrong key or tampered ciphertext always surfaces as the authentication/MAC failure above, never as a KEM-level error.
 
@@ -425,15 +430,16 @@ See [`SECURITY.md`](SECURITY.md) for the full threat model and protocol diagrams
 
 # ML-KEM-768 conformance status
 
-The ML-KEM-768 implementation in `src/zupt_mlkem.c` is verified conformant to
-**FIPS 203** by the [`conformance-suite/`](conformance-suite/) gate, wired into
-CI at [`.forgejo/workflows/mlkem-conformance.yaml`](.forgejo/workflows/mlkem-conformance.yaml):
+The ML-KEM-768 implementation in `src/zupt_mlkem.c` passes the listed
+**FIPS 203** conformance checks in [`conformance-suite/`](conformance-suite/).
+The Forgejo workflow runs ACVP, kyber-py and dynamic timing checks; the locked
+RustCrypto differential remains part of the documented local release gate:
 
 | Check | Result |
 |---|---|
 | Official NIST ACVP vectors (keyGen, encaps, decaps, §7.2/§7.3 key checks) | **80/80** |
 | Differential vs kyber-py 1.2.0 (both directions) | **100/100 ×2** |
-| Differential vs RustCrypto `ml-kem` 0.2.3 (both directions) | **50/50 ×2** |
+| Differential vs RustCrypto `ml-kem` 0.2.3 (both directions) | **100/100 ×2** |
 | Self-roundtrip / tampered-ciphertext rejection | **1000/1000 / 1000/1000** |
 | Constant-time (dudect + ctgrind) | clean — see [`CT_VERIFICATION.md`](CT_VERIFICATION.md) |
 
@@ -466,8 +472,8 @@ This repository ships **two libraries**, an intentional design:
 
 | Library | Source | Symbols | When to use |
 |---|---|---|---|
-| `libvuptsdk-base.so` | from source in this repo | 55 (ZUPTSDK_1.0 subset), with VaptVupt codec 2.65.11 | Verifying the build, embedded use, builds where binary blobs aren't allowed |
-| `libvuptsdk.so` | bundled prebuilt | 68 (full ZUPTSDK_1.0 + 2.1, including `easy_*`) | Frozen x86-64 compatibility artifact; what `make install` currently stages |
+| `libvuptsdk-base.so` | from source in this repo | 56 (`ZUPTSDK_1.0` subset plus the `ZUPTSDK_1.1` extraction-limit setter), with VaptVupt codec 2.65.11 | Current source release and package candidates |
+| `libvuptsdk.so` | bundled prebuilt | 68 (full `ZUPTSDK_1.0` + `2.1`, including `easy_*`) | Frozen x86-64 compatibility testing through `make legacy-test` |
 
 **Why retain a prebuilt at all?** The `easy_*` convenience layer
 (`zuptsdk_easy_encrypt`, etc.) and a few v2.1 functions do not have source code
@@ -487,7 +493,8 @@ The `make audit` target verifies on every build that:
 
 1. Architecture matches between source and prebuilt
 2. SONAMEs follow the stable convention
-3. The 24 symbols common to both are byte-compatible
+3. Both export the same 24 core symbol names (this does not establish
+   behavioral or calling-contract equivalence)
 4. All canonical-only symbols are in the public `zuptsdk_*` namespace
 5. Source build does not leak any private symbols
 
@@ -500,56 +507,57 @@ The `make audit` target verifies on every build that:
 ```
 make base        Build the current source-based ABI subset
 make test-source Test the current source build and embedded codec
-make             Also stage the frozen full prebuilt for compatibility work
-make test        Compile + run smoke test, then audit, then license check
+make             Build the current source-based base library
+make test        Run source, codec, and per-file license tests
+make legacy-test Explicitly test the frozen full prebuilt
 make audit       Verify source build is a strict subset of canonical
 make audit-licenses  Verify the SDK and codec per-file SPDX scopes
 make test-asan   Build from-source with ASAN/UBSAN
-make install     Install the frozen full prebuilt; not a codec-2.65.11 build
+make install     Install the source-built base library
 make uninstall   Remove installed files
-make dist        Build an unreleased source-only tarball
+make dist        Build the deterministic base prerelease tarball
 make clean       Remove build artifacts
 ```
 
 The current source-only gate includes:
 
-- 6 ASAN/UBSAN smoke tests against the source-build (ctx/options lifecycle, secure_zero)
+- 12 source smoke checks, including failure-output contracts, malformed solid
+  archives, plain/password/hybrid-key VaptVupt round trips, metadata parsing,
+  extraction-limit rejection and private-key output policy
 - 57 focused serial and parallel embedded-codec checks, including exact
   capacities, malformed input, policy parity, and BCJ decoding
 - 1 per-file license audit (SDK dual-license scope and embedded codec GPL scope)
 
-The repository also contains the historical full-prebuilt smoke/symbol tests
-and Python, Node.js, Go, and Rust binding suites. They were not rerun for this
-source integration because the frozen full binary's `libargon2.so.1` and
-`libcrypto.so.3` runtime dependencies are unavailable in the recorded local
-environment. See [AUDIT.md](AUDIT.md) for the exact current/historical split.
+The frozen full-prebuilt smoke and symbol tests were rerun with their explicit
+`libargon2.so.1` and `libcrypto.so.3` runtime dependencies. The broader legacy
+Python, Node.js, Go and Rust binding suites were not rerun for this base
+prerelease. See [AUDIT.md](AUDIT.md) for the current/historical split.
 
 The default x86-64 source build targets the architecture's SSE2 baseline; it
 does not force AVX2. Passing `VV_SIMD_FLAGS=-mavx2` is an explicit opt-in that
-makes the resulting whole codec artifact require an AVX2-capable CPU. The
-`make dist` filename includes `unreleased-source`, so it cannot be confused
-with the already-released SDK 2.0.3 artifacts.
+makes the resulting whole codec artifact require an AVX2-capable CPU.
 
-Separately, the **ML-KEM-768 conformance gate** ([`conformance-suite/`](conformance-suite/)) verifies FIPS 203 compliance of the from-source KEM: **80/80** official NIST ACVP vectors, byte-for-byte differentials against two independent implementations (both directions), and a dudect + ctgrind constant-time check. See [ML-KEM-768 conformance status](#ml-kem-768-conformance-status).
+Separately, the **ML-KEM-768 conformance gate**
+([`conformance-suite/`](conformance-suite/)) exercises the from-source KEM
+against **80/80** official NIST ACVP checks and byte-for-byte differentials
+against two independent implementations in both directions. Dudect and
+ctgrind provide dynamic timing-leakage evidence on the tested x86-64
+toolchain. See [ML-KEM-768 conformance status](#ml-kem-768-conformance-status).
 
 ---
 
-# Versioning & ABI commitment
+# Versioning and ABI boundary
 
-`libvuptsdk` follows strict ABI versioning at the linker level:
+`libvuptsdk-base.so.2` preserves the existing `ZUPTSDK_1.0` signatures and
+places the additive extraction-limit API in `ZUPTSDK_1.1`. The separate frozen
+`libvuptsdk.so.2.0.3` retains its historical `ZUPTSDK_1.0` through
+`ZUPTSDK_2.1` surface. The base prerelease does not claim that those two symbol
+sets are interchangeable, and it installs under distinct names to avoid an
+accidental replacement.
 
-- **Major** (`libvuptsdk.so.2`): incompatible ABI break
-- **Minor** (`ZUPTSDK_2.1` block in `zuptsdk.map`): additive, backward-compatible
-- **Patch** (`libvuptsdk.so.2.0.0` → `2.0.1`): bug fixes only, no API change
-
-The contract:
-
-- **No symbol in `ZUPTSDK_1.0` will ever be removed or change behavior.**
-- **No symbol in `ZUPTSDK_1.0` will change its function signature.**
-- **New symbols added in 2.x go into `ZUPTSDK_2.x` blocks.** Old code linked against `ZUPTSDK_1.0` keeps working.
-- Any incompatible change is a `libvuptsdk.so.3` event (major SONAME bump, separate parallel-installable library).
-
-Current: **2.0.3** (ABI: ZUPTSDK_1.0 + ZUPTSDK_2.1).
+Current source prerelease: **2.0.4-base.1** (`ZUPTSDK_1.0` subset plus
+`ZUPTSDK_1.1`). Frozen compatibility artifact: **2.0.3** (`ZUPTSDK_1.0` +
+`ZUPTSDK_2.1`).
 
 ---
 
@@ -559,17 +567,19 @@ See [`SECURITY.md`](SECURITY.md) for the full threat model, cryptographic constr
 
 **Reporting vulnerabilities**: email **`zupt@riseup.net`**. Do not file public issues for security bugs. PGP key: TBD.
 
-**Audited**:
+**Recorded internal evidence** (current and historical rows are separated in
+[`AUDIT.md`](AUDIT.md)):
 
 - 169 unit tests (compile + roundtrip + tamper detection)
 - 750,000 mutation fuzz iterations under ASAN/UBSAN
-- Constant-time crypto primitives verified by Jasmin (jasminc 2026.03.0)
+- Dynamic dudect and ctgrind evidence for the current ML-KEM source on x86-64;
+  this is not a proof or a cross-platform guarantee
 - Symbol versioning, no internal namespace leakage
 - Full report: [`AUDIT.md`](AUDIT.md)
 
 **Not audited** (open items):
 
-- External independent crypto audit (cost, not engineering — ~$30-60k)
+- External independent cryptographic audit
 - The `zuptsdk_easy_*` source — only the binary has been audited
 - **The canonical prebuilt has not been rebuilt from the post-2026-07-02
   ML-KEM source**; its ML-KEM conformance is not yet re-verified (the
@@ -590,7 +600,8 @@ First-party source files carry
 `SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial`.
 Embedded VaptVupt files retain `SPDX-License-Identifier: GPL-3.0-or-later` and
 are distributed with [`LICENSE-GPL-3.0`](LICENSE-GPL-3.0).
-The `make audit-licenses` target enforces this on every CI run.
+The `make audit-licenses` target enforces this locally and can be configured as
+a required CI check by each forge administrator.
 
 Commercial-option rights require a separate written agreement signed by the
 applicable copyright holder and licensee. Inquiries: `sac@securityops.co`.
@@ -624,10 +635,10 @@ and conservative-format policy; see [`CHANGELOG.md`](CHANGELOG.md) and
 - [VaptVupt](https://git.securityops.co/cristiancmoises/vaptvupt) — the backup utility (CLI + GUI) built on libvuptsdk
 - [VaptVupt SECURITY.md](https://git.securityops.co/cristiancmoises/vaptvupt/src/branch/main/SECURITY.md) — threat model for the CLI
 - [vaptvupt-codec](https://git.securityops.co/cristiancmoises/vaptvupt-codec) — the standalone compression codec
-- [Jasmin](https://github.com/jasmin-lang/jasmin) — verified-CT cryptography compiler used here
+- [Jasmin](https://github.com/jasmin-lang/jasmin) — compiler associated with the optional checked-in assembly sources
 - [NIST FIPS 203](https://csrc.nist.gov/pubs/fips/203/final) — ML-KEM specification
 
 ---
 
-**libvuptsdk 2.0.3** · Author: Cristian Cezar Moisés · License:
+**libvuptsdk-base 2.0.4-base.1** · Author: Cristian Cezar Moisés · License:
 AGPL-3.0-or-later or separate signed commercial agreement

@@ -637,7 +637,7 @@ int zupt_mlkem768_decaps(uint8_t ss[32], const uint8_t ct[1088],
      * bit trick: fail = ((-(uint64_t)diff) >> 63) & 1 */
     uint8_t fail = (uint8_t)(((-(int64_t)(uint64_t)diff) >> 63) & 1);
 #ifdef ZUPT_USE_JASMIN
-    /* JASMIN-VERIFIED: CT select — proven by Jasmin type system.
+    /* Optional Jasmin-generated branchless select.
      * fail=0 → ss_success, fail=1 → ss_reject */
     zupt_ct_select_32(ss, ss_success, ss_reject, (uint64_t)fail);
 #else

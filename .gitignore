@@ -20,7 +20,8 @@ __pycache__/
 
 # Conformance-suite Rust differential
 conformance-suite/differential_rustcrypto/target/
-conformance-suite/differential_rustcrypto/Cargo.lock
 
 # Delivery archives
 *.zip
+/dist/
+/release/

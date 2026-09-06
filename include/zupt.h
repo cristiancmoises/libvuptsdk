@@ -172,6 +172,9 @@ typedef struct {
 typedef struct {
     int level; uint32_t block_size; uint16_t codec_id;
     int verbose, encrypt, quiet, solid, threads;
+    /* 0 keeps the CLI's historical unlimited behavior. Library wrappers set
+     * an explicit ceiling before extracting untrusted archives. */
+    uint64_t max_output_size;
     int pq_mode;           /* 1 = post-quantum hybrid KEM mode */
     int sdk_mode;          /* 1 = use libvuptsdk-backed v3 crypto (HKDF combiner + commitment + HPKE) */
     int dedup;             /* 1 = block-level deduplication enabled */

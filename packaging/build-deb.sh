@@ -1,158 +1,111 @@
-#!/bin/bash
+#!/bin/sh
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
 # Copyright (c) 2026 Cristian Cezar Moisés
-# Build libvuptsdk Debian package.
-# Produces versioned runtime and development packages under /tmp.
-set -e
+# Build source-derived libvuptsdk-base Debian runtime and development packages.
+set -eu
+
 cd "$(dirname "$0")/.."
 
-echo "error: Debian runtime packaging is disabled for this source revision." >&2
-echo "The tracked full-ABI prebuilt is frozen and does not contain codec 2.65.11." >&2
-echo "Regenerate and re-audit the full library from complete source before packaging." >&2
-exit 2
+VERSION=$(make -s printversion)
+RELEASE=$(make -s printrelease)
+SOVERSION=${SOVERSION:-2}
+ARCH=${ARCH:-$(dpkg --print-architecture)}
+MULTIARCH=${MULTIARCH:-$(dpkg-architecture -qDEB_HOST_MULTIARCH)}
+DEB_VERSION=${DEB_VERSION:-${VERSION}~base1-1}
+OUT_DIR=${OUT_DIR:-$(pwd)/dist/packages}
+SOURCE_LIB=build/libvuptsdk-base.so.${VERSION}
+SOURCE_STATIC=build/libvuptsdk-base.a
 
-# Derive the version from the Makefile (single source of truth) unless the
-# caller overrides it, so packages can never be silently mislabeled on a bump.
-VERSION="${VERSION:-$(make -s printversion)}"
-SOVERSION="${SOVERSION:-2}"
-ARCH="${ARCH:-amd64}"
+make base
 
-# Build first if not already built. Pass VERSION through so an override that
-# doesn't match the Makefile fails loudly here rather than at the install step.
-if [ ! -f "build/libvuptsdk.so.${VERSION}" ]; then
-    make
+if [ ! -f "$SOURCE_LIB" ] || [ ! -f "$SOURCE_STATIC" ]; then
+    echo "error: source-built base libraries were not produced" >&2
+    exit 1
 fi
-if [ ! -f "build/libvuptsdk.so.${VERSION}" ]; then
-    echo "error: build/libvuptsdk.so.${VERSION} not produced — VERSION=$VERSION does not match the Makefile build" >&2
+if readelf -d "$SOURCE_LIB" | grep -Eq '\((RPATH|RUNPATH)\)'; then
+    echo "error: refusing to package a library with an RPATH or RUNPATH" >&2
     exit 1
 fi
 
-# ─── Runtime package: libvuptsdk2 ──────────────────────────────────
-PKG_RT="/tmp/libvuptsdk${SOVERSION}_${VERSION}_${ARCH}"
-rm -rf "$PKG_RT"
-mkdir -p "$PKG_RT/DEBIAN" \
-         "$PKG_RT/usr/lib/x86_64-linux-gnu" \
-         "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}"
+mkdir -p "$OUT_DIR"
+WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/libvuptsdk-deb.XXXXXXXX")
+trap 'rm -rf -- "$WORK_DIR"' EXIT HUP INT TERM
 
-install -m 0755 "build/libvuptsdk.so.${VERSION}" \
-    "$PKG_RT/usr/lib/x86_64-linux-gnu/libvuptsdk.so.${VERSION}"
-# Strip debug info to reduce package size and remove information disclosure.
-# Override with STRIP_DEB=0 to keep symbols (debug builds).
-if [ "${STRIP_DEB:-1}" != "0" ]; then
-    strip --strip-unneeded \
-        "$PKG_RT/usr/lib/x86_64-linux-gnu/libvuptsdk.so.${VERSION}" 2>/dev/null || true
+RT_NAME=libvuptsdk-base${SOVERSION}
+DEV_NAME=libvuptsdk-base-dev
+RT_ROOT=$WORK_DIR/runtime
+DEV_ROOT=$WORK_DIR/devel
+RT_LIB=$RT_ROOT/usr/lib/$MULTIARCH
+DEV_LIB=$DEV_ROOT/usr/lib/$MULTIARCH
+RT_DOC=$RT_ROOT/usr/share/doc/$RT_NAME
+DEV_DOC=$DEV_ROOT/usr/share/doc/$DEV_NAME
+
+mkdir -p "$RT_ROOT/DEBIAN" "$RT_LIB" "$RT_DOC"
+install -m 0755 "$SOURCE_LIB" "$RT_LIB/libvuptsdk-base.so.${VERSION}"
+if [ "${STRIP_DEB:-1}" != 0 ]; then
+    strip --strip-unneeded "$RT_LIB/libvuptsdk-base.so.${VERSION}"
 fi
-ln -sf "libvuptsdk.so.${VERSION}" \
-    "$PKG_RT/usr/lib/x86_64-linux-gnu/libvuptsdk.so.${SOVERSION}"
+ln -s "libvuptsdk-base.so.${VERSION}" "$RT_LIB/libvuptsdk-base.so.${SOVERSION}"
+install -m 0644 LICENSE "$RT_DOC/copyright"
+install -m 0644 README.md README.pt-BR.md CHANGELOG.md SECURITY.md NOTICE \
+    LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL "$RT_DOC/"
 
-install -m 0644 LICENSE       "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/copyright"
-install -m 0644 README.md     "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/README.md"
-install -m 0644 README.pt-BR.md "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/README.pt-BR.md"
-install -m 0644 CHANGELOG.md  "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/CHANGELOG.md"
-install -m 0644 SECURITY.md   "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/SECURITY.md"
-install -m 0644 LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL NOTICE \
-    "$PKG_RT/usr/share/doc/libvuptsdk${SOVERSION}/"
-
-INSTALLED_SIZE=$(du -sk "$PKG_RT" | cut -f1)
-cat > "$PKG_RT/DEBIAN/control" <<EOF
-Package: libvuptsdk${SOVERSION}
-Version: ${VERSION}
+RT_SIZE=$(du -sk "$RT_ROOT" | cut -f1)
+cat > "$RT_ROOT/DEBIAN/control" <<EOF
+Package: $RT_NAME
+Version: $DEB_VERSION
 Section: libs
 Priority: optional
-Architecture: ${ARCH}
-Depends: libc6 (>= 2.28)
+Architecture: $ARCH
+Multi-Arch: same
+Depends: libc6 (>= 2.34), libgcc-s1
 Maintainer: Cristian Cezar Moisés <zupt@riseup.net>
-Installed-Size: ${INSTALLED_SIZE}
+Installed-Size: $RT_SIZE
 Homepage: https://git.securityops.co/cristiancmoises/libvuptsdk
-Description: Post-quantum hybrid cryptography runtime library
- libvuptsdk provides a stable C ABI for post-quantum hybrid encryption
- (ML-KEM-768 + X25519), authenticated encryption (XChaCha20-Poly1305 or
- AES-256-SIV), Argon2id password mode, and streaming AEAD.
- .
- This package contains the runtime shared library only. For development
- headers, install libvuptsdk-dev.
+Description: source-built VaptVupt archive SDK runtime
+ libvuptsdk-base provides the reproducible archive API backed by the
+ VaptVupt 2.65.11 codec. It is intentionally separate from the frozen
+ full-ABI libvuptsdk 2.0.3 compatibility binary.
+EOF
+cat > "$RT_ROOT/DEBIAN/triggers" <<'EOF'
+activate-noawait ldconfig
 EOF
 
-# Triggers ldconfig
-cat > "$PKG_RT/DEBIAN/postinst" <<'POST'
-#!/bin/sh
-set -e
-ldconfig
-POST
-chmod 0755 "$PKG_RT/DEBIAN/postinst"
+mkdir -p "$DEV_ROOT/DEBIAN" "$DEV_LIB/pkgconfig" \
+    "$DEV_ROOT/usr/include/libvuptsdk-base" "$DEV_DOC"
+ln -s "libvuptsdk-base.so.${SOVERSION}" "$DEV_LIB/libvuptsdk-base.so"
+install -m 0644 "$SOURCE_STATIC" "$DEV_LIB/libvuptsdk-base.a"
+install -m 0644 include/zuptsdk.h \
+    "$DEV_ROOT/usr/include/libvuptsdk-base/zuptsdk.h"
+sed -e 's|^prefix=.*|prefix=/usr|' \
+    -e "s|^libdir=.*|libdir=/usr/lib/$MULTIARCH|" \
+    -e 's|^includedir=.*|includedir=/usr/include/libvuptsdk-base|' \
+    build/vuptsdk-base.pc > "$DEV_LIB/pkgconfig/vuptsdk-base.pc"
+install -m 0644 LICENSE "$DEV_DOC/copyright"
+install -m 0644 README.md README.pt-BR.md doc/API_REFERENCE.md \
+    doc/API_REFERENCE.pt-BR.md doc/example.c "$DEV_DOC/"
 
-cat > "$PKG_RT/DEBIAN/postrm" <<'POST'
-#!/bin/sh
-set -e
-ldconfig
-POST
-chmod 0755 "$PKG_RT/DEBIAN/postrm"
-
-dpkg-deb --build "$PKG_RT" > /dev/null
-echo "Built: ${PKG_RT}.deb"
-
-# ─── Development package: libvuptsdk-dev ───────────────────────────
-PKG_DEV="/tmp/libvuptsdk-dev_${VERSION}_${ARCH}"
-rm -rf "$PKG_DEV"
-mkdir -p "$PKG_DEV/DEBIAN" \
-         "$PKG_DEV/usr/lib/x86_64-linux-gnu/pkgconfig" \
-         "$PKG_DEV/usr/include" \
-         "$PKG_DEV/usr/share/doc/libvuptsdk-dev"
-
-# Symlink for -lvuptsdk
-ln -sf "libvuptsdk.so.${SOVERSION}" \
-    "$PKG_DEV/usr/lib/x86_64-linux-gnu/libvuptsdk.so"
-# Static archive
-install -m 0644 build/libvuptsdk-base.a \
-    "$PKG_DEV/usr/lib/x86_64-linux-gnu/libvuptsdk.a"
-
-# Public headers
-for h in zuptsdk.h zuptsdk_easy.h zuptsdk.hpp zuptsdk_metrics.h \
-         zsdk_aes256_gcm_siv.h zsdk_aes256_siv.h zsdk_argon2id.h \
-         zsdk_blake2b.h zsdk_hkdf.h zsdk_xchacha20_poly1305.h; do
-    install -m 0644 "include/$h" "$PKG_DEV/usr/include/"
-done
-
-# pkg-config — generate fresh with /usr prefix (Debian convention)
-mkdir -p "$PKG_DEV/usr/lib/x86_64-linux-gnu/pkgconfig"
-cat > "$PKG_DEV/usr/lib/x86_64-linux-gnu/pkgconfig/vuptsdk.pc" <<PCEOF
-prefix=/usr
-exec_prefix=\${prefix}
-libdir=/usr/lib/x86_64-linux-gnu
-includedir=/usr/include
-
-Name: vuptsdk
-Description: libvuptsdk - post-quantum hybrid cryptography
-Version: ${VERSION}
-Libs: -L\${libdir} -lvuptsdk
-Cflags: -I\${includedir}
-PCEOF
-chmod 0644 "$PKG_DEV/usr/lib/x86_64-linux-gnu/pkgconfig/vuptsdk.pc"
-
-install -m 0644 LICENSE       "$PKG_DEV/usr/share/doc/libvuptsdk-dev/copyright"
-install -m 0644 README.md     "$PKG_DEV/usr/share/doc/libvuptsdk-dev/README.md"
-install -m 0644 README.pt-BR.md "$PKG_DEV/usr/share/doc/libvuptsdk-dev/README.pt-BR.md"
-install -m 0644 AUDIT.md      "$PKG_DEV/usr/share/doc/libvuptsdk-dev/AUDIT.md"
-install -m 0644 LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL NOTICE \
-    "$PKG_DEV/usr/share/doc/libvuptsdk-dev/"
-
-INSTALLED_SIZE_DEV=$(du -sk "$PKG_DEV" | cut -f1)
-cat > "$PKG_DEV/DEBIAN/control" <<EOF
-Package: libvuptsdk-dev
-Version: ${VERSION}
+DEV_SIZE=$(du -sk "$DEV_ROOT" | cut -f1)
+cat > "$DEV_ROOT/DEBIAN/control" <<EOF
+Package: $DEV_NAME
+Version: $DEB_VERSION
 Section: libdevel
 Priority: optional
-Architecture: ${ARCH}
-Depends: libvuptsdk${SOVERSION} (= ${VERSION})
+Architecture: $ARCH
+Multi-Arch: same
+Depends: $RT_NAME (= $DEB_VERSION)
 Maintainer: Cristian Cezar Moisés <zupt@riseup.net>
-Installed-Size: ${INSTALLED_SIZE_DEV}
+Installed-Size: $DEV_SIZE
 Homepage: https://git.securityops.co/cristiancmoises/libvuptsdk
-Description: Post-quantum hybrid cryptography development files
- Headers, static archive, pkg-config file, and development docs for
- libvuptsdk. Install this to build applications against libvuptsdk.
- .
- Use 'pkg-config --cflags --libs vuptsdk' or '-lvuptsdk' to link.
+Description: development files for the source-built VaptVupt archive SDK
+ This package contains the supported public header, static library and
+ pkg-config metadata for libvuptsdk-base $RELEASE.
 EOF
 
-dpkg-deb --build "$PKG_DEV" > /dev/null
-echo "Built: ${PKG_DEV}.deb"
+RT_DEB=$OUT_DIR/${RT_NAME}_${DEB_VERSION}_${ARCH}.deb
+DEV_DEB=$OUT_DIR/${DEV_NAME}_${DEB_VERSION}_${ARCH}.deb
+dpkg-deb --root-owner-group --build "$RT_ROOT" "$RT_DEB" >/dev/null
+dpkg-deb --root-owner-group --build "$DEV_ROOT" "$DEV_DEB" >/dev/null
+
+echo "Built: $RT_DEB"
+echo "Built: $DEV_DEB"

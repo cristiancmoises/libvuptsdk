@@ -98,8 +98,13 @@ ZUPTSDK_1.0 {
         *;
 };
 
+ZUPTSDK_1.1 {
+    global:
+        zuptsdk_ctx_set_max_decompressed;
+} ZUPTSDK_1.0;
+
 # Note: ZUPTSDK_2.1 ABI (easy_* convenience layer + metrics) is NOT
 # emitted by the source-buildable library. Those symbols live only in
-# the canonical prebuilt artifact at prebuilt/libvuptsdk.so.2.0.0
+# the canonical prebuilt artifact at prebuilt/libvuptsdk.so.2.0.3
 # which is shipped alongside this source tree. See README.md ABI
 # section for details.

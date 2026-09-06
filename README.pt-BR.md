@@ -6,34 +6,35 @@
 por aplicações clientes. **Zupt é um consumidor existente e separado; seu nome
 não é alterado por este projeto.** A aplicação VaptVupt é relacionada, mas não
 é intercambiável com Zupt, com este SDK ou com o codec independente. O
-repositório contém uma biblioteca compilável a partir do código-fonte e uma
-biblioteca completa pré-compilada. Essas duas variantes não têm o mesmo estado
-de atualização; leia a seção abaixo antes de escolher qual artefato usar.
+repositório contém uma biblioteca base compilável a partir do código-fonte e
+um binário completo antigo. Essas duas variantes não têm o mesmo escopo nem o
+mesmo estado de atualização.
 
 ## Estado desta árvore
 
-- Versão da ABI do SDK: **2.0.3** (`libvuptsdk.so.2`).
+- Pré-lançamento compilável: **2.0.4-base.1**
+  (`libvuptsdk-base.so.2`).
 - Codec incorporado na compilação por código-fonte: **VaptVupt 2.65.11**,
   sincronizado do commit
   `1cc78bce90619dbf97e0ed1ad449c3c4f6329041`.
 - O codec mantém sua licença `GPL-3.0-or-later`; ele não foi relicenciado para
   satisfazer a política de licenciamento do SDK.
-- Nenhuma nova versão do SDK é declarada por esta atualização. Uma tag e os
-  binários de lançamento só devem ser publicados depois das verificações e da
-  resolução da limitação da biblioteca completa pré-compilada.
+- A versão completa congelada permanece **2.0.3** e é usada somente pelo alvo
+  explícito `make legacy-test`.
 
 ## Duas bibliotecas, dois escopos
 
 | Artefato | Origem | Conteúdo | Situação |
 |---|---|---|---|
-| `libvuptsdk-base.so` / `libvuptsdk-base.a` | Compilado deste repositório | Subconjunto da ABI `ZUPTSDK_1.0`, incluindo o codec atual | Reproduzível a partir do código publicado |
-| `libvuptsdk.so` | Arquivo em `prebuilt/` | ABI completa `ZUPTSDK_1.0` + `ZUPTSDK_2.1` | Binário x86-64 congelado; não contém todas as correções recentes do código-fonte |
+| `libvuptsdk-base.so` / `libvuptsdk-base.a` | Compilado deste repositório | Subconjunto `ZUPTSDK_1.0` e o limitador `ZUPTSDK_1.1`, incluindo o codec atual | Artefato atual de pré-lançamento |
+| `libvuptsdk.so` | Arquivo em `prebuilt/` | ABI completa `ZUPTSDK_1.0` + `ZUPTSDK_2.1` | Binário x86-64 congelado; somente compatibilidade |
 
 A árvore pública ainda não contém o código de algumas funções `easy_*` e de
 outros símbolos exclusivos da biblioteca completa. Por isso, o binário em
 `prebuilt/` não pode ser regenerado honestamente apenas com este repositório.
 Não renomeie esse arquivo para uma versão nova nem afirme que ele contém o
-codec 2.65.11. Consulte [SECURITY.md](SECURITY.md) para as demais limitações.
+codec 2.65.11. Ele não é instalado, empacotado nem anexado ao lançamento base.
+Consulte [SECURITY.md](SECURITY.md) para as demais limitações.
 
 ## Compilar e testar
 
@@ -41,16 +42,16 @@ Requisitos básicos: compilador C11, GNU Make, binutils e uma implementação de
 `pthread`.
 
 ```sh
-make base
-make test-source
+make
+make test
 make test-asan
 ```
 
-`make test-source` executa o teste de fumaça da variante compilada, o teste
-focado do codec incorporado e a verificação das licenças por arquivo. `make
-test-asan` recompila essa variante com AddressSanitizer e
-UndefinedBehaviorSanitizer. O alvo `make` também copia o binário completo
-congelado para testes de compatibilidade; isso não atualiza esse binário.
+`make test` executa doze verificações públicas da variante compilada, inclusive
+ciclos reais sem criptografia, com senha e com chave híbrida, 57 testes focados
+do codec e a verificação das licenças por arquivo. `make test-asan` recompila a
+variante com AddressSanitizer e UndefinedBehaviorSanitizer. Use `make
+legacy-test` somente para verificar o binário 2.0.3 congelado.
 
 Para produzir o arquivo-fonte determinístico:
 
@@ -58,12 +59,21 @@ Para produzir o arquivo-fonte determinístico:
 make dist
 ```
 
-O nome do arquivo gerado contém `unreleased-source`: trata-se de um candidato
-somente de código-fonte, e não de uma republicação da versão 2.0.3. Ele inclui
-os avisos e textos de licença do SDK e do codec, mas não inclui a biblioteca
-completa congelada. A geração de pacotes de runtime DEB/RPM permanece bloqueada
-até que a ABI completa possa ser recompilada e auditada a partir do
-código-fonte.
+O arquivo `libvuptsdk-base-2.0.4-base.1.tar.gz` inclui os avisos e textos de
+licença do SDK e do codec, mas não inclui a biblioteca completa congelada. Os
+scripts abaixo geram candidatos nativos separados, sem fingir que fornecem a
+ABI completa:
+
+```sh
+packaging/build-deb.sh
+packaging/build-rpm.sh
+```
+
+Os pacotes Debian se chamam `libvuptsdk-base2` e
+`libvuptsdk-base-dev`; os RPMs usam `libvuptsdk-base` e
+`libvuptsdk-base-devel`. Os scripts recusam uma biblioteca que contenha
+RPATH/RUNPATH. Os arquivos anexados ao lançamento não são assinados por uma
+distribuição; valide-os com `SHA256SUMS`.
 
 No x86-64, a compilação padrão usa a base SSE2 da arquitetura e não força AVX2.
 Definir `VV_SIMD_FLAGS=-mavx2` é uma opção explícita que faz todo o artefato do
@@ -85,12 +95,18 @@ int main(void)
 Compile com os dados do `pkg-config`:
 
 ```sh
-cc exemplo.c $(pkg-config --cflags --libs vuptsdk) -o exemplo
+cc exemplo.c $(pkg-config --cflags --libs vuptsdk-base) -o exemplo
 ```
 
-A referência completa da API está em
-[doc/API_REFERENCE.md](doc/API_REFERENCE.md). Exemplos compiláveis ficam em
-[doc/examples/](doc/examples/).
+A referência da API está em
+[doc/API_REFERENCE.md](doc/API_REFERENCE.md), com uma versão em português em
+[doc/API_REFERENCE.pt-BR.md](doc/API_REFERENCE.pt-BR.md). Um exemplo mínimo
+fica em [doc/example.c](doc/example.c).
+
+As extrações da biblioteca base têm limite total padrão de 16 GiB. Ajuste-o
+por contexto com `zuptsdk_ctx_set_max_decompressed()`; zero remove o limite e
+não é recomendado para arquivos não confiáveis. O setter antigo no objeto de
+opções é mantido apenas para compatibilidade e não controla a extração.
 
 ## Contrato do codec incorporado
 

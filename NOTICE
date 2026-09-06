@@ -23,5 +23,8 @@ synchronized from vaptvupt-codec commit
 1cc78bce90619dbf97e0ed1ad449c3c4f6329041. They retain their upstream
 GPL-3.0-or-later SPDX identifiers and are distributed under
 LICENSE-GPL-3.0. The libvuptsdk commercial option does not relicense them.
+The `vaptvupt_api` source and header retain that provenance but contain the
+documented SDK-specific outer-checksum and conservative-format policy; they
+are not byte-identical copies of the tagged codec wrapper.
 
 Commercial licensing contact: sac@securityops.co

@@ -18,6 +18,16 @@ Scope note: a clean statistical timing test and a clean taint-tracking run are
 not replace, the deductive/Jasmin proofs in §4.3/§4.4, which remain outstanding
 (see §4 below).
 
+## 2026-09-06 release-candidate rerun
+
+The checked-in `conformance-suite/ct/run_ct.sh` was rerun against the
+2.0.4-base.1 candidate with GCC 16.1.0 and Valgrind 3.27.0 on x86-64. The
+accept-versus-reject experiment reported max |t| = 1.389, the
+fixed-versus-random experiment reported max |t| = 2.680, and ctgrind reported
+no conditional jump or move dependent on tainted data. Both statistical values
+remain below the suite's 4.5 evidence threshold. This rerun does not expand the
+platform scope and is not a formal proof.
+
 ---
 
 ## 1 · dudect-style statistical timing test (`dudect_decaps.c`)
