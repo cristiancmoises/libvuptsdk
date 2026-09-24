@@ -1,7 +1,6 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
- * Copyright (c) 2026 Cristian Cezar Moisés
- *
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright (c) 2025-2026 Cristian Cezar Moisés
  * ZUPT v0.6.0 — Parallel Compress / Decompress Pipeline
  *
  * Architecture: batch-parallel with persistent worker threads.
@@ -28,6 +27,7 @@
  */
 #include "zupt_parallel.h"
 #include "vaptvupt.h"  /* VAPTVUPT: VaptVupt codec integration */
+#include "vaptvupt_api.h"  /* F-16: single codec-option policy (vvz_*) */
 #include <stdlib.h>
 #include <string.h>
 
@@ -91,25 +91,23 @@ static void worker_compress(zpar_slot_t *slot, const zupt_keyring_t *kr) {
     } else if (codec == ZUPT_CODEC_ZUPT_LZ) {
         comp_size = zupt_lz_compress(rbuf, nread, cbuf, zupt_lz_bound(nread), level);
     }
-    /* VAPTVUPT: VaptVupt codec in parallel compress worker */
+    /* VAPTVUPT: VaptVupt codec in parallel compress worker.
+     *
+     * F-16 (v3.9.0): this worker previously built its own vv_options_t
+     * and had drifted from the serial wrapper (forced window_log=20, a
+     * different ULTRA_FAST cutoff, checksum=1, no format_v2, no BCJ, no
+     * ULTRA_FAST/format_v2 gate). EXTREME + window_log=20 produced
+     * blocks the decoder rejects on real ELF content — a corrupt archive
+     * at creation time. Codec option policy now lives in exactly one
+     * place: vvz_compress() (src/vaptvupt_api.c), which also self-checks
+     * every produced block (decode + memcmp) and fails closed so the
+     * caller falls back to STORE rather than ever writing an unreadable
+     * block. Serial and parallel paths emit identical streams. */
     else if (codec == ZUPT_CODEC_VAPTVUPT) {
-        vv_options_t vv_opts;
-        vv_default_options(&vv_opts);
-        if (level <= 2) vv_opts.mode = VV_MODE_ULTRA_FAST;
-        else if (level <= 7) vv_opts.mode = VV_MODE_BALANCED;
-        else vv_opts.mode = VV_MODE_EXTREME;
-        /* Match the serial vvz wrapper's on-disk policy. The archive carries
-         * its own block checksum, and output must stay in the conservative
-         * decoder-compatible subset regardless of thread count. */
-        vv_opts.checksum = 0;
-        vv_opts.compat_v246_5_decoder = 1;
-        vv_opts.format_v2 = 0;
-        vv_opts.window_log = (nread > (1u << 16)) ? 20 : 16;
-
-        size_t vv_cap = vv_compress_bound(nread);
+        size_t vv_cap = vvz_compress_bound(nread);
         uint8_t *vv_tmp = (uint8_t *)malloc(vv_cap);
         if (vv_tmp) {
-            int64_t csz = vv_compress(rbuf, nread, vv_tmp, vv_cap, &vv_opts);
+            int64_t csz = vvz_compress(rbuf, nread, vv_tmp, vv_cap, level);
             if (csz > 0 && (size_t)csz < nread) {
                 if ((size_t)csz <= cbuf_cap) {
                     memcpy(cbuf, vv_tmp, (size_t)csz);
@@ -137,7 +135,26 @@ static void worker_compress(zpar_slot_t *slot, const zupt_keyring_t *kr) {
     slot->out_bflags = 0;
     if (kr && kr->active) {
         size_t enc_len;
-        uint8_t *enc = zupt_encrypt_buffer(kr, payload, payload_size, slot->block_seq, &enc_len);
+        uint8_t *enc;
+        /* F-09: when the archive uses AAD-preface mode, bind the per-block frame
+         * preface into the MAC EXACTLY as the serial path does (zupt_format.c).
+         * The extract side honours the archive's ZUPT_FLAG_AAD_PREFACE flag, so
+         * if this worker skipped the preface every multithreaded encrypted block
+         * would fail authentication and the archive would be unextractable. The
+         * scalars mirror the serial call: predicted compressed_size is
+         * nonce(16) + payload + hmac(32), block_flags is ENCRYPTED. */
+        if (kr->use_preface_aad) {
+            uint8_t preface[ZUPT_PREFACE_AAD_LEN];
+            uint64_t predicted_csz = 16 + (uint64_t)payload_size + 32;
+            zupt_serialize_preface_aad_scalars(
+                ZUPT_BLOCK_DATA, slot->actual_codec, (uint16_t)ZUPT_BFLAG_ENCRYPTED,
+                (uint64_t)nread, predicted_csz, slot->checksum, preface);
+            enc = zupt_encrypt_buffer_aad(kr, payload, payload_size, slot->block_seq,
+                                          preface, ZUPT_PREFACE_AAD_LEN, &enc_len);
+            zupt_secure_wipe(preface, sizeof(preface));
+        } else {
+            enc = zupt_encrypt_buffer(kr, payload, payload_size, slot->block_seq, &enc_len);
+        }
         if (!enc) { free(cbuf); slot->error = ZUPT_ERR_NOMEM; return; }
         /* Output is the encrypted payload (caller frees slot->output) */
         slot->output = enc;
@@ -171,11 +188,36 @@ static void worker_decompress(zpar_slot_t *slot, const zupt_keyring_t *kr) {
     if (!comp_data && comp_len > 0) { slot->error = ZUPT_ERR_CORRUPT; return; }
     if (slot->uncomp_size > ZUPT_MAX_BLOCK_SZ) { slot->error = ZUPT_ERR_OVERFLOW; return; }
 
-    /* Decrypt if encrypted — HMAC verified inside zupt_decrypt_buffer (before decryption) */
+    /* SECURITY: in an encrypted archive every block MUST be encrypted. The
+     * per-block ENCRYPTED flag is not covered by the archive-integrity
+     * trailer, so without this gate an attacker could clear the flag on a
+     * forged STORE block and inject attacker-chosen plaintext that passes
+     * only the keyless XXH64 — an authentication bypass. Mirror the
+     * single-threaded decompress_block fail-closed behaviour. */
+    if (kr && kr->active && !(slot->block_flags & ZUPT_BFLAG_ENCRYPTED)) {
+        slot->error = ZUPT_ERR_AUTH_FAIL; return;
+    }
+
+    /* Decrypt if encrypted — HMAC verified inside the decrypt call (before
+     * decryption). Must mirror the compress worker and the serial
+     * decompress_block: when the archive uses AAD-preface mode, rebuild the
+     * canonical preface from this block's stored header fields and bind it into
+     * the MAC, otherwise a multithreaded extract of a preface-bound archive
+     * fails to authenticate every block. */
     if (slot->block_flags & ZUPT_BFLAG_ENCRYPTED) {
         if (!kr || !kr->active) { slot->error = ZUPT_ERR_AUTH_FAIL; return; }
         size_t dec_len;
-        dec_payload = zupt_decrypt_buffer(kr, comp_data, comp_len, slot->block_seq, &dec_len);
+        if (kr->use_preface_aad) {
+            uint8_t preface[ZUPT_PREFACE_AAD_LEN];
+            zupt_serialize_preface_aad_scalars(
+                ZUPT_BLOCK_DATA, slot->codec_id, slot->block_flags,
+                slot->uncomp_size, (uint64_t)comp_len, slot->stored_checksum, preface);
+            dec_payload = zupt_decrypt_buffer_aad(kr, comp_data, comp_len, slot->block_seq,
+                                                  preface, ZUPT_PREFACE_AAD_LEN, &dec_len);
+            zupt_secure_wipe(preface, sizeof(preface));
+        } else {
+            dec_payload = zupt_decrypt_buffer(kr, comp_data, comp_len, slot->block_seq, &dec_len);
+        }
         if (!dec_payload) { slot->error = ZUPT_ERR_AUTH_FAIL; return; }
         comp_data = dec_payload;
         comp_len = dec_len;
@@ -190,7 +232,10 @@ static void worker_decompress(zpar_slot_t *slot, const zupt_keyring_t *kr) {
         return;
     }
 
-    uint8_t *out = (uint8_t *)malloc(olen);
+    /* Over-allocate by ZUPT_VV_DECODE_SLACK for the VaptVupt AVX2 decode
+     * over-copy (see zupt.h). olen still tracks the true uncompressed
+     * size for the XXH64 verify and the returned output_len. */
+    uint8_t *out = (uint8_t *)malloc(olen + ZUPT_VV_DECODE_SLACK);
     if (!out) { free(dec_payload); slot->error = ZUPT_ERR_NOMEM; return; }
 
     zupt_error_t result = ZUPT_OK;
@@ -232,7 +277,10 @@ static void worker_decompress(zpar_slot_t *slot, const zupt_keyring_t *kr) {
     }
     /* VAPTVUPT: VaptVupt codec in parallel decompress worker */
     else if (codec == ZUPT_CODEC_VAPTVUPT) {
-        int64_t dsz = vv_decompress(comp_data, comp_len, out, olen);
+        /* Pass padded capacity (olen + slack) for the AVX2 over-copy;
+         * require the returned size to equal the true olen. */
+        int64_t dsz = vv_decompress(comp_data, comp_len, out,
+                                    olen + ZUPT_VV_DECODE_SLACK);
         if (dsz < 0 || (size_t)dsz != olen) result = ZUPT_ERR_CORRUPT;
     } else {
         result = ZUPT_ERR_UNSUPPORTED;
@@ -325,6 +373,11 @@ static void *worker_entry(void *arg) {
 zpar_ctx_t *zpar_create(int nthreads, uint32_t block_size, int mode,
                          const zupt_keyring_t *keyring) {
     if (nthreads < 1) nthreads = 1;
+    /* SECURITY (defense in depth): clamp the worker/slot count here too, not
+     * only at the CLI. A direct library/API caller could otherwise request an
+     * arbitrary count and exhaust memory (per-slot input buffers) and thread
+     * handles. The CLI already clamps -t to the same ceiling. */
+    if (nthreads > ZUPT_MAX_THREADS) nthreads = ZUPT_MAX_THREADS;
 
     zpar_ctx_t *ctx = (zpar_ctx_t *)calloc(1, sizeof(zpar_ctx_t));
     if (!ctx) return NULL;

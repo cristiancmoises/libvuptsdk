@@ -1,5 +1,11 @@
 # ML-KEM-768 — Constant-Time Verification Report
 
+> **Historical record.** The dated tests, compiler results and source hashes
+> below apply to the revisions named in this report. They do not establish
+> a constant-time proof for the 2.1.0-base.1 engine import. Current rerun
+> results and limitations are in [AUDIT.md](AUDIT.md) and
+> [SECURITY.md](SECURITY.md).
+
 **Date:** 2026-07-02
 **Engineer:** Cristian Cezar Moisés — Security Ops (*In Code We Trust*) · sac@securityops.co
 **Subject:** side-channel (timing) verification of the **patched** `zupt_mlkem.c`
@@ -145,14 +151,13 @@ between the accept key and the implicit-rejection key on every target compiler.
 
 ```bash
 # dudect
-gcc -O2 -Iinclude -Isrc conformance-suite/ct/dudect_decaps.c \
-    src/zupt_mlkem.c src/zupt_keccak.c src/zupt_sha256.c -o dudect -lm
+sh conformance-suite/build_driver.sh conformance-suite/ct/dudect_decaps.c ./dudect
 ./dudect                    # Exp 1: accept vs implicit-reject
-gcc -O2 -DEXP2 ... -o dudect2 -lm && ./dudect2   # Exp 2
+sh conformance-suite/build_driver.sh conformance-suite/ct/dudect_decaps.c ./dudect2 -DEXP2
+./dudect2                   # Exp 2: fixed vs random valid ciphertexts
 
 # ctgrind (needs valgrind + valgrind/memcheck.h)
-gcc -O2 -g -Iinclude -Isrc conformance-suite/ct/ctgrind_mlkem.c \
-    src/zupt_mlkem.c src/zupt_keccak.c src/zupt_sha256.c -o ctg
+sh conformance-suite/build_driver.sh conformance-suite/ct/ctgrind_mlkem.c ./ctg -g
 valgrind --tool=memcheck --error-exitcode=99 -q ./ctg     # expect no "Conditional jump/move" findings
 ```
 

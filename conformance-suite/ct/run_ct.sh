@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+# SPDX-License-Identifier: Apache-2.0
 # Constant-time verification for ML-KEM-768 (dudect + ctgrind). Run from a
 # libvuptsdk checkout with this suite inside it. Requires valgrind + gcc.
 #
@@ -8,9 +8,10 @@
 # Blocking signal   : dudect definite leak (|t| >= 10, exit 2).
 # Advisory only      : dudect WARN zone (4.5 <= |t| < 10, exit 1) — statistical
 #                     noise on shared CI runners; reported, does not fail.
-SRC="src/zupt_mlkem.c src/zupt_keccak.c src/zupt_sha256.c"
-D="$(dirname "$0")"
-TMP="${TMPDIR:-/tmp}"
+D=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/libvuptsdk-ct.XXXXXX") || exit 1
+trap 'rm -rf "$TMP"' EXIT HUP INT TERM
+BUILDER="$D/../build_driver.sh"
 rc=0
 
 run_dudect() {
@@ -21,17 +22,20 @@ run_dudect() {
         rc=1
     elif [ "$ec" -eq 1 ]; then
         echo "WARN ($label): dudect in the 4.5..10 zone — advisory, not failing the gate"
-    else
+    elif [ "$ec" -eq 0 ]; then
         echo "PASS ($label): dudect clean"
+    else
+        echo "FAIL ($label): dudect did not complete (exit $ec)"
+        rc=1
     fi
 }
 
 echo "== dudect: accept vs implicit-reject =="
-gcc -O2 -Iinclude -Isrc "$D/dudect_decaps.c" $SRC -o "$TMP/dudect" -lm || { echo "FAIL: dudect build"; exit 1; }
+sh "$BUILDER" "$D/dudect_decaps.c" "$TMP/dudect" || { echo "FAIL: dudect build"; exit 1; }
 run_dudect "$TMP/dudect" "accept-vs-reject"
 
 echo "== dudect: fixed-vs-random accept path =="
-gcc -O2 -DEXP2 -Iinclude -Isrc "$D/dudect_decaps.c" $SRC -o "$TMP/dudect2" -lm || { echo "FAIL: dudect2 build"; exit 1; }
+sh "$BUILDER" "$D/dudect_decaps.c" "$TMP/dudect2" -DEXP2 || { echo "FAIL: dudect2 build"; exit 1; }
 run_dudect "$TMP/dudect2" "fixed-vs-random"
 
 echo "== ctgrind: taint-tracking under memcheck (fail on 'Conditional jump/move') =="
@@ -39,7 +43,7 @@ if ! command -v valgrind >/dev/null 2>&1; then
     echo "FAIL: valgrind not installed — ctgrind cannot run, refusing to report a pass"
     exit 1
 fi
-gcc -O2 -g -Iinclude -Isrc "$D/ctgrind_mlkem.c" $SRC -o "$TMP/ctg" || { echo "FAIL: ctgrind build"; exit 1; }
+sh "$BUILDER" "$D/ctgrind_mlkem.c" "$TMP/ctg" -g || { echo "FAIL: ctgrind build"; exit 1; }
 # NOTE: run without -q so valgrind always emits its "ERROR SUMMARY" line, which
 # we use below as proof the instrumented program ran to completion.
 OUT=$(valgrind --tool=memcheck "$TMP/ctg" 2>&1)

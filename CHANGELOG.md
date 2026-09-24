@@ -3,7 +3,66 @@
 All notable changes to libvuptsdk are documented in this file. The
 format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
-at the ABI level (see README.md "Versioning").
+at the ABI level (see the release boundary in README.md).
+
+---
+
+## [2.1.0-base.1] — 2026-09-24
+
+This prerelease updates the source-built `libvuptsdk-base` API. The frozen
+full-ABI 2.0.3 binary remains unchanged and is not a new release artifact.
+
+### Archive engine and compatibility
+
+- Import the Zupt **5.2.9** engine from
+  `63f27dd0c5afcf155f813a069c29f6384d46790c`, retaining SDK-specific ABI,
+  temporary-file and extraction-budget behavior.
+- Retain the VaptVupt **2.65.11** codec revision
+  `1cc78bce90619dbf97e0ed1ad449c3c4f6329041`; update its SDK integration with the
+  engine's current safety checks.
+- Initialize CPU detection once per process so automatic codec selection and
+  SHA-NI dispatch use the detected capabilities. The portable AES implementation
+  remains the default and is not claimed constant-time.
+- Write format 1.6 archives with an archive integrity trailer (AIT) and
+  authenticated block prefaces in encrypted archives. New output requires an
+  updated reader. Plaintext integrity checks remain corruption checks rather
+  than sender authentication.
+- Publish verified extracted files atomically without overwriting existing
+  files, symlinks or FIFOs. Archive creation atomically replaces its own final
+  destination; extraction is not a transaction across all archive entries.
+- On Linux, allow archive output and extraction beneath execute-only ancestor
+  directories while retaining symlink traversal rejection and final-directory
+  syncing. Add regression coverage for these paths.
+- Add `zuptsdk_ctx_set_allow_legacy_no_ait()` in `ZUPTSDK_1.2`. Missing AIT is
+  rejected by default; applications may explicitly allow it for trusted legacy
+  migration. Present trailers are still verified.
+- Preserve the context's 16 GiB default decompressed-output ceiling and the
+  narrower source API. The base password wrapper explicitly selects PBKDF2;
+  importing the engine does not add the frozen full-ABI crypto APIs.
+
+### Licensing and release packages
+
+- License the author's first-party source, including same-author imported
+  adaptations, under **Apache-2.0**, Copyright 2026 Cristian Cezar Moisés.
+  Preserve applicable BSD-2-Clause, BSD-3-Clause and CC0 third-party notices.
+  The frozen binary retains its historical license.
+- Use `.zupt` for newly generated release packages starting with this version.
+  Preserve older releases, tags, package names and package formats.
+- Provide source and Linux x86-64 bundles, `SHA256SUMS`, its detached GPG
+  signature and the public release key on the four existing repository hosts.
+  `.zupt` archive UUIDs and creation times mean payload equivalence does not
+  imply byte-identical containers.
+
+### Documentation and verification
+
+- Replace the legacy-heavy landing page with matching English and Brazilian
+  Portuguese source-build, install, signed-download and extraction guides.
+- Document backend request lifecycles, resource budgets, memory ownership and
+  the explicit legacy archive migration option in both API references.
+- Scope security, audit and performance claims to the actual source release.
+  Bend laws concern modeled count/sum tree folds, not a proof of the C codec
+  or cryptography. Current commands and results are recorded in [AUDIT.md](AUDIT.md)
+  and [BENCHMARKS.md](BENCHMARKS.md).
 
 ---
 
@@ -561,4 +620,6 @@ milestones:
 
 ---
 
-**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).
+Copyright 2026 Cristian Cezar Moisés. This document is licensed under
+[Apache-2.0](LICENSE). Historical entries describe licensing at the time of
+those releases.

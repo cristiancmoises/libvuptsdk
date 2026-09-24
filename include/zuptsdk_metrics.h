@@ -1,5 +1,5 @@
 /* vuptsdk observability — metrics & structured logging hooks
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  */
 #ifndef ZUPTSDK_METRICS_H
 #define ZUPTSDK_METRICS_H

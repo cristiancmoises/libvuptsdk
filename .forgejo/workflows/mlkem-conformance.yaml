@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+# SPDX-License-Identifier: Apache-2.0
 # CI conformance checks for ML-KEM-768 (FIPS 203). Configure these jobs as
 # required checks in the forge settings when they must block merges.
 name: mlkem-conformance
@@ -10,8 +10,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build KAT driver
         run: |
-          gcc -O2 -Iinclude -Isrc conformance-suite/kat_mlkem768_acvp.c \
-              src/zupt_mlkem.c src/zupt_keccak.c src/zupt_sha256.c -o katz
+          sh conformance-suite/build_driver.sh conformance-suite/kat_mlkem768_acvp.c ./katz
       - name: Run official NIST ACVP vectors (must be 80/80)
         run: cd conformance-suite && python3 run_kats.py ../katz
 

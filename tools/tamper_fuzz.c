@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial */
+/* SPDX-License-Identifier: Apache-2.0 */
 /* Tamper fuzzer — encrypts known plaintext, mutates one random byte
    per iteration, verifies decrypt rejects every mutation. */
 #define _DEFAULT_SOURCE 1

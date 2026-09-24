@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  * ctgrind-style constant-time check for libvuptsdk ML-KEM-768 (Valgrind).
  *
  * Method (Langley's ctgrind, as used by pqclean/BoringSSL): mark secret bytes

@@ -3,7 +3,7 @@
 [English](API_REFERENCE.md)
 
 Esta referência vale para o pré-lançamento compilável
-`2.0.4-base.1` e para o header instalado
+`2.1.0-base.1` e para o header instalado
 `libvuptsdk-base/zuptsdk.h`. O header é a fonte autoritativa para assinaturas e
 regras de posse de memória.
 
@@ -69,6 +69,19 @@ Crie opções com `zuptsdk_options_create()` e destrua-as com
 `LZ` e `STORE`; os níveis válidos vão de 1 a 9. Escolha
 `ZUPTSDK_CODEC_VAPTVUPT` explicitamente quando esse formato for obrigatório.
 
+## Política do codec incorporado
+
+O wrapper mapeia os níveis 1–2 para `ULTRA_FAST`, 3–7 para `BALANCED` e 8–9
+para `EXTREME`. Os modos balanceado e extremo habilitam o filtro BCJ automático.
+`format_v2=0` é a política de seleção automática do codec; não força todos os
+frames a usar um formato antigo. Use leitores atuais para novos arquivos.
+
+O checksum interno do frame é desativado porque o bloco do contêiner tem sua
+própria verificação de integridade. A compactação também decodifica o frame
+candidato e compara seus bytes com a entrada; se o candidato for rejeitado,
+o chamador pode armazenar o bloco sem compactação. As funções internas `vvz_*`
+não são API pública e não devem ser usadas sem as verificações do contêiner.
+
 ## Fluxo de arquivo em memória
 
 1. Crie contexto e opções.
@@ -79,7 +92,11 @@ Crie opções com `zuptsdk_options_create()` e destrua-as com
 
 `zuptsdk_compress_files()` recebe caminhos do sistema de arquivos;
 `zuptsdk_extract_to_dir()` extrai todas as entradas seguras. Consulte o exemplo
-compilável em `doc/example.c`.
+compilável em [example.c](example.c). Arquivos verificados são publicados sem
+substituir destinos existentes: conflitos com arquivo, link simbólico ou FIFO
+fazem a operação falhar e preservam o alvo existente. Use um diretório de
+extração novo. Essa regra vale por arquivo, não como uma transação única para
+todo o conteúdo.
 
 ## I/O por callbacks
 
@@ -104,8 +121,127 @@ antigo de contagem tem 32 bits e satura em `UINT32_MAX`.
 
 Os testes de lançamento cobrem ciclo de vida, zeroização, ciclos de arquivo
 VaptVupt sem criptografia, autenticado por senha e com chave híbrida, entrada
-sólida malformada, metadados, limite de extração, 57 testes do codec,
-licenciamento por arquivo e sanitizers. Notificações por callback, operações de
+sólida malformada, metadados, limite de extração, trailers de integridade,
+testes do codec, licenciamento por arquivo e sanitizers. Notificações por callback, operações de
 disco e execução em Windows/macOS ainda não fazem parte desse gate. Restauração
 de disco é destrutiva e deve ser testada somente em imagens descartáveis ou
 máquinas virtuais.
+
+
+## Exemplo de arquivo em memória
+
+```c
+#include <string.h>
+#include <zuptsdk.h>
+
+int main(void)
+{
+    static const unsigned char entrada[] = "Conteudo do arquivo VaptVupt";
+    zuptsdk_ctx_t *ctx = NULL;
+    zuptsdk_options_t *opts = NULL;
+    unsigned char *arquivo = NULL, *saida = NULL;
+    size_t tamanho_arquivo = 0, tamanho_saida = 0;
+    int rc = zuptsdk_ctx_create(&ctx);
+
+    if (rc == 0) rc = zuptsdk_options_create(&opts);
+    if (rc == 0) rc = zuptsdk_options_set_codec(opts, ZUPTSDK_CODEC_VAPTVUPT);
+    if (rc == 0) rc = zuptsdk_compress_buffer(
+        ctx, opts, "conteudo.txt", entrada, sizeof(entrada) - 1,
+        NULL, NULL, &arquivo, &tamanho_arquivo);
+    if (rc == 0) rc = zuptsdk_verify(ctx, arquivo, tamanho_arquivo, NULL, NULL);
+    if (rc == 0) rc = zuptsdk_extract_buffer(
+        ctx, arquivo, tamanho_arquivo, NULL, NULL, &saida, &tamanho_saida);
+
+    int ok = rc == 0 && tamanho_saida == sizeof(entrada) - 1 &&
+             memcmp(entrada, saida, tamanho_saida) == 0;
+    zuptsdk_free(saida);
+    zuptsdk_free(arquivo);
+    zuptsdk_options_destroy(opts);
+    zuptsdk_ctx_destroy(ctx);
+    return ok ? 0 : 1;
+}
+```
+
+Compile com `pkg-config`, como indicado no início desta referência.
+
+## Arquivos criptografados
+
+A versão por código-fonte oferece arquivos com senha PBKDF2 e com chave
+híbrida ML-KEM-768/X25519. O wrapper seleciona PBKDF2 explicitamente; o suporte
+opcional a Argon2 do projeto original não é uma configuração da API base.
+Passe um buffer seguro de senha ou um handle de chave destinatária às
+operações de arquivo e libere-o com a função de destruição correspondente.
+A interface completa `easy_*` permanece exclusiva do binário congelado.
+Consulte [SECURITY.md](../SECURITY.md) para os limites criptográficos.
+
+## Compatibilidade de arquivos
+
+A versão 2.1.0-base.1 grava o formato Zupt 1.6, com trailer de integridade do
+arquivo (AIT) depois do rodapé e preâmbulos de bloco autenticados nos arquivos
+criptografados. Use um leitor atualizado para novos arquivos; o binário
+congelado 2.0.3 não é um leitor substituto compatível.
+
+O contexto rejeita arquivos sem AIT por padrão. Para migrar um arquivo antigo
+**confiável**, crie um contexto dedicado e habilite explicitamente:
+
+```c
+int rc = zuptsdk_ctx_set_allow_legacy_no_ait(ctx, 1);
+/* Confira rc e verifique/extraia somente o arquivo legado confiavel. */
+```
+
+O setter aceita apenas 0 ou 1 e é exportado em `ZUPTSDK_1.2`. Zero é o padrão.
+A opção permite a ausência do trailer; ela não desativa a verificação de um
+trailer presente. Prefira regravar o conteúdo migrado no formato atual e manter
+a opção desligada para entradas não confiáveis.
+
+O AIT protege o header serializado e o prefixo do rodapé. Em arquivos
+criptografados, usa HMAC-SHA256 com a chave MAC do arquivo; em arquivos sem
+criptografia, usa XXH64 apenas para detectar corrupção. Os blocos de dados
+possuem verificações próprias. Checksum sem criptografia e leitura de metadados
+não comprovam quem criou um arquivo. As assinaturas de download são assinaturas
+GPG separadas sobre `SHA256SUMS`, descritas no
+[README](../README.pt-BR.md#baixar-verificar-e-extrair).
+
+## Integração com um serviço backend
+
+Use a API por código-fonte por meio de um módulo nativo C/C++ ou de um adaptador
+FFI vinculado a `vuptsdk-base`. Os bindings existentes de Python, Node.js, Go e
+Rust usam a ABI completa histórica e não podem ser redirecionados para esta
+biblioteca como uma atualização direta. O `zuptsdk.h` instalado é o contrato
+público; símbolos internos `vvz_*` e do motor ficam ocultos e não são pontos
+de integração.
+
+Um ciclo prático de requisição é:
+
+1. Limite o tamanho do upload antes de passá-lo ao SDK. Crie um contexto para
+   a tarefa e configure threads e teto de bytes descompactados.
+2. Execute compactação e extração, que são bloqueantes, em uma fila limitada
+   de workers. Considere as threads do SDK ao dimensionar a concorrência do
+   próprio serviço.
+3. Use um diretório novo, controlado pela aplicação, para cada extração e
+   quotas separadas para disco temporário, tempo de CPU e memória do processo.
+   O teto de descompactação não limita a entrada nem a memória.
+4. Confira cada retorno. Trate `ZUPTSDK_ERR_TOO_LARGE`, erros de autenticação
+   e entrada malformada como falhas; apresente mensagens da aplicação ao
+   cliente e registre `zuptsdk_last_error_detail()` nos logs adequados.
+5. Publique a saída somente depois do sucesso. Em caso de falha, descarte o
+   diretório da requisição; a extração não é uma transação única para todas
+   as entradas do arquivo.
+6. Libere buffers com `zuptsdk_free()` e destrua opções, chaves, buffers de
+   senha e contexto. Configure um alocador global personalizado apenas uma vez,
+   no início do processo, antes de chamar o SDK.
+
+O exemplo em memória serve para dados de tamanho limitado. Para arquivos
+maiores, use a API de sistema de arquivos. O I/O por callbacks ainda usa
+arquivos temporários e pode carregar buffers na memória; registrar callbacks
+de progresso e log ainda não produz notificações. Não compartilhe um contexto
+entre chamadas simultâneas. Este lançamento não afirma validação abrangente
+com detector de corridas entre contextos separados.
+
+## Licença
+
+Copyright 2026 Cristian Cezar Moisés. O código de primeira parte e esta
+documentação usam a [Apache-2.0](../LICENSE). Preserve os avisos de terceiros
+em [NOTICE](../NOTICE). As referências ao binário e aos bindings históricos
+não alteram a licença do binário congelado nem fornecem o código de sua API
+adicional.

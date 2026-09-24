@@ -1,30 +1,62 @@
-libvuptsdk licensing notice
-===========================
+libvuptsdk
+Copyright (c) 2026 Cristian Cezar Moisés
 
-Copyright in first-party code remains with the copyright holders identified by
-file notices and repository history.
+Cristian Cezar Moisés licenses his first-party code in this SDK distribution
+under the Apache License, Version 2.0. This includes his bundled VaptVupt and
+Zupt code and local integration changes. See LICENSE and per-file SPDX notices.
+The separate upstream repositories and historical releases retain their own
+published license grants. The frozen prebuilt/libvuptsdk.so.2.0.3 remains a
+historical compatibility fixture under its original licensing and is excluded
+from new release packages. LICENSE-AGPL-3.0, LICENSE-GPL-3.0 and
+LICENSE-COMMERCIAL are retained as historical references, not current SDK terms.
 
-First-party files bearing
+Upstream provenance
+-------------------
+VaptVupt codec 2.65.11:
+  https://git.securityops.co/cristiancmoises/vaptvupt-codec
+  1cc78bce90619dbf97e0ed1ad449c3c4f6329041
+Zupt 5.2.9:
+  https://git.securityops.co/cristiancmoises/zupt
+  63f27dd0c5afcf155f813a069c29f6384d46790c
+UPSTREAM.json records source hashes and the local integration policy. Imported
+files have been modified for SDK integration and this licensing grant.
 
-  AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+Third-party material
+--------------------
+The following original notices and obligations remain applicable in addition
+to Apache-2.0 for local modifications:
 
-are available under the complete AGPL public option in LICENSE and
-LICENSE-AGPL-3.0, or under a separate commercial agreement signed by the
-applicable copyright holder and licensee. LICENSE-COMMERCIAL is not itself a
-commercial license grant.
+* src/zupt_xxh.c and src/vv_xxh64.c adapt xxHash/XXH64 by Yann Collet:
+  BSD-2-Clause; full notice in LICENSE-BSD-2-Clause.
+  https://github.com/Cyan4973/xxHash
 
-Dependencies, generated conformance data, prebuilt artifacts, contributed
-code, and separately noticed material retain their own licenses. Per-file
-notices control where they differ.
+* src/zupt_mlkem.c adapts pq-crystals/kyber reference routines, including NTT,
+  base multiplication and Montgomery representation. This distribution uses
+  the upstream CC0-1.0 option; full text in LICENSE-CC0-1.0.
+  https://github.com/pq-crystals/kyber
 
-The embedded VaptVupt codec files in `src/vv_*.c`, `src/vaptvupt_api.c`,
-`include/vv_*.h`, `include/vaptvupt.h`, and `include/vaptvupt_api.h` were
-synchronized from vaptvupt-codec commit
-1cc78bce90619dbf97e0ed1ad449c3c4f6329041. They retain their upstream
-GPL-3.0-or-later SPDX identifiers and are distributed under
-LICENSE-GPL-3.0. The libvuptsdk commercial option does not relicense them.
-The `vaptvupt_api` source and header retain that provenance but contain the
-documented SDK-specific outer-checksum and conservative-format policy; they
-are not byte-identical copies of the tagged codec wrapper.
+* src/zupt_x25519.c adapts curve25519-donna's field representation, packing,
+  swap and inversion routines. Copyright 2008 Google Inc.; author Adam Langley.
+  BSD-3-Clause; full notice in LICENSE-BSD-3-Clause.
+  https://github.com/agl/curve25519-donna
 
-Commercial licensing contact: sac@securityops.co
+* The x86 filter in src/vv_bcj.c adapts Igor Pavlov's public-domain LZMA SDK
+  C/Bra86.c state machine. The AArch64 filter is separate first-party code.
+  https://www.7-zip.org/sdk.html
+
+* src/zupt_sha256_shani.c adapts Jeffrey Walton's public-domain SHA-Intrinsics
+  sha256-x86.c, which credits Intel and Sean Gulley's miTLS material. Reference:
+  https://github.com/noloader/SHA-Intrinsics/blob/d03795497f3e4576083fc2cd8fe0b924f24d0bb2/sha256-x86.c
+
+The original adaptation revisions for xxHash, Kyber, curve25519-donna and LZMA
+were not retained; no unverified revision is asserted here.
+
+The textual Jasmin/assembly sources retain their per-file provenance. The
+external Jasmin compiler is not bundled. A matching .jazz description does
+not by itself establish a formal proof of the hand-written assembly.
+
+The optional Bend proofs cover only the definitions and assumptions in
+formal/aggregation.bend and LAWS.bend. They do not prove the C implementation,
+cryptography, filesystem behavior, or operating system.
+
+Attribution contact: sac@securityops.co

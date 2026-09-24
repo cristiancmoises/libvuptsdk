@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+# SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Cristian Cezar Moisés
 #
 # libvuptsdk symbol version script
@@ -102,6 +102,11 @@ ZUPTSDK_1.1 {
     global:
         zuptsdk_ctx_set_max_decompressed;
 } ZUPTSDK_1.0;
+
+ZUPTSDK_1.2 {
+    global:
+        zuptsdk_ctx_set_allow_legacy_no_ait;
+} ZUPTSDK_1.1;
 
 # Note: ZUPTSDK_2.1 ABI (easy_* convenience layer + metrics) is NOT
 # emitted by the source-buildable library. Those symbols live only in

@@ -1,9 +1,8 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
- * Copyright (c) 2026 Cristian Cezar Moisés
- *
- * Zupt — CPU Feature Detection
- * Copyright (c) 2026 Cristian Cezar Moisés — AGPL-3.0-or-later
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright (c) 2025-2026 Cristian Cezar Moisés
+ * ZUPT — CPU Feature Detection
+ * Copyright (c) 2026 Cristian Cezar Moisés — Apache-2.0
  */
 #ifndef ZUPT_CPUID_H
 #define ZUPT_CPUID_H
@@ -16,16 +15,20 @@ typedef struct {
     int has_pclmul;  /* CPUID.01H:ECX[1]  — CLMUL (carry-less multiply) */
     int has_avx2;    /* CPUID.07H:EBX[5]  — AVX2 (256-bit SIMD) */
     int has_sse41;   /* CPUID.01H:ECX[19] — SSE4.1 */
+    int has_shani;   /* CPUID.07H:EBX[29] — SHA-NI (SHA-1/SHA-256 ext) */
 } zupt_cpu_features_t;
 
-/*@ assigns f->has_aesni, f->has_avx, f->has_pclmul, f->has_avx2, f->has_sse41;
+/*@ assigns f->has_aesni, f->has_avx, f->has_pclmul, f->has_avx2, f->has_sse41, f->has_shani;
   @ ensures f->has_aesni == 0 || f->has_aesni == 1;
   @ ensures f->has_avx == 0 || f->has_avx == 1;
   @ ensures f->has_pclmul == 0 || f->has_pclmul == 1;
   @ ensures f->has_avx2 == 0 || f->has_avx2 == 1;
   @ ensures f->has_sse41 == 0 || f->has_sse41 == 1;
+  @ ensures f->has_shani == 0 || f->has_shani == 1;
 */
 void zupt_detect_cpu(zupt_cpu_features_t *f);
+/* Library callers have no CLI main; initialize shared dispatch exactly once. */
+void zupt_cpu_init(void);
 
 /* Global instance — set once at program start */
 extern zupt_cpu_features_t zupt_cpu;

@@ -1,6 +1,6 @@
 /*
  * BLAKE2b (RFC 7693)
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  */
 #ifndef ZSDK_BLAKE2B_H
 #define ZSDK_BLAKE2B_H

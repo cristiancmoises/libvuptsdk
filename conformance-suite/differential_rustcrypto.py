@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+# SPDX-License-Identifier: Apache-2.0
 """Bidirectional ML-KEM-768 differential against RustCrypto ml-kem 0.2.3."""
 
 import pathlib

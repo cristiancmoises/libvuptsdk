@@ -1,0 +1,238 @@
+{
+  "upstreams": {
+    "vaptvupt-codec": {
+      "version": "2.65.11",
+      "commit": "1cc78bce90619dbf97e0ed1ad449c3c4f6329041",
+      "url": "https://git.securityops.co/cristiancmoises/vaptvupt-codec"
+    },
+    "zupt": {
+      "version": "5.2.9",
+      "commit": "63f27dd0c5afcf155f813a069c29f6384d46790c",
+      "url": "https://git.securityops.co/cristiancmoises/zupt"
+    }
+  },
+  "policy": "Reference hashes identify the exact published inputs; SDK files retain local patches and Apache-2.0 notices and are not byte-identical upstream copies.",
+  "local_changes": [
+    "Preserve the public base ABI and SDK input validation, secure wipes, allocation and extraction size limits.",
+    "Integrate Zupt archive format 1.6, integrity trailers, atomic publication, dedup and disk validation.",
+    "Use the Zupt level-to-codec mapping, checksum policy and decode-plus-compare acceptance check.",
+    "Retain the Zupt encoder entropy workspace reserve and scalar portability adjustments.",
+    "Initialize CPU features once for SDK AUTO and SHA-NI dispatch.",
+    "Suppress successful CLI output in the SDK and retain aggregate extraction quotas.",
+    "Expose a default-off trusted legacy no-AIT read option through ZUPTSDK_1.2.",
+    "Preserve local ML-KEM modulus validation and secret wiping and Keccak state wiping.",
+    "Apply the copyright owner Apache-2.0 grant; preserve BSD-2-Clause, BSD-3-Clause and CC0-1.0 terms."
+  ],
+  "reference_files": [
+    {
+      "path": "include/vaptvupt.h",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "8b30b6f71bb99757ecbd953254dcad02a1ea95299c22563fb2f713b814d53648"
+    },
+    {
+      "path": "include/vaptvupt_api.h",
+      "upstream": "zupt",
+      "reference_sha256": "947525574f5bb47686a84e7cab5167a358a0b99e5bcfbb8d98724cdda7e17929"
+    },
+    {
+      "path": "include/vv_ans.h",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "aa7d63fe924d264a2960f419d9ee73eee8b45707ddf254ef5a4dd01a62d93c9c"
+    },
+    {
+      "path": "include/vv_bcj.h",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "430efd845a68347426a2b847486f5710aaaee96c3b36de55ca3a04ac9a060da0"
+    },
+    {
+      "path": "include/vv_huffman.h",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "7e1567bd37831cf6d21cd558657f8ef207fa085d9711f9811388efd0e6844770"
+    },
+    {
+      "path": "include/vv_platform.h",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "a10233e9b58b07de88ef1ca4898be6bfb3f2aefc5226365796859f2ae9cc2011"
+    },
+    {
+      "path": "include/zupt.h",
+      "upstream": "zupt",
+      "reference_sha256": "5d3f744d52ffbe50502bf22d32312265c42568e4030b756f90ccdd866ecb818d"
+    },
+    {
+      "path": "include/zupt_acsl.h",
+      "upstream": "zupt",
+      "reference_sha256": "a845dfe6ae012fcb4222195ef65aae1d6e43a47c63554dde96147dd1c7ca6499"
+    },
+    {
+      "path": "include/zupt_cpuid.h",
+      "upstream": "zupt",
+      "reference_sha256": "a1a8f3c3c4cd7ffe32f3dc680ec2b2bd5307f1a8424dc0f5d9635991b805bb45"
+    },
+    {
+      "path": "include/zupt_jasmin.h",
+      "upstream": "zupt",
+      "reference_sha256": "0dae773c4c9410a8cf4a87c612932e1657449035b53cd2f61d73fbebe922de09"
+    },
+    {
+      "path": "include/zupt_keccak.h",
+      "upstream": "zupt",
+      "reference_sha256": "2f75ffb82a3e9369c42df252aaed6bd4f65a5e0d79e3a6269b6a1cd4899118bc"
+    },
+    {
+      "path": "include/zupt_mlkem.h",
+      "upstream": "zupt",
+      "reference_sha256": "a6e041fb6e12e659f555b882ac7b34c4995877e28e52df3b08cb4d65365ef7d9"
+    },
+    {
+      "path": "include/zupt_x25519.h",
+      "upstream": "zupt",
+      "reference_sha256": "79bfe01a316db5c1e4775d27d7c1b47f887a165775a0cac250c10be0e49b3989"
+    },
+    {
+      "path": "src/vaptvupt_api.c",
+      "upstream": "zupt",
+      "reference_sha256": "e73266a910ef935b40905101ac8122d2bb4412a246264abc93725f17f727d2eb"
+    },
+    {
+      "path": "src/vv_ans.c",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "1a2e57dec8999b062b54b8653d7669c5150f1ebd97d769b1e3302c3e7ee6485e"
+    },
+    {
+      "path": "src/vv_bcj.c",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "f2252bced6e06e45a893117e5590317e1589f14a1b1faa9aa87e183fecff53ca"
+    },
+    {
+      "path": "src/vv_decoder.c",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "116d4405e82dbda89d85b1d3f358c14688cda5f7c0f149ef9d8d71399628418f"
+    },
+    {
+      "path": "src/vv_encoder.c",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "d157c6f2c4b222f693209b220499f371d0c928bfaeb31afb83aa0e51e9720c36"
+    },
+    {
+      "path": "src/vv_huffman.c",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "95e17021d900a6e37bb483c8522b13c3baeeed23a8f72b1fbcb9bd26df2dc6e3"
+    },
+    {
+      "path": "src/vv_simd.c",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "52b5470a800ef875dc77f367ac76c93001ea08291ac6fd54bcdf9caed50f223d"
+    },
+    {
+      "path": "src/vv_xxh64.c",
+      "upstream": "vaptvupt-codec",
+      "reference_sha256": "28da74854e8af5d4183814b751bce9f0848e3aa81a56338257953e5ede3889f2"
+    },
+    {
+      "path": "src/zupt_aes256.c",
+      "upstream": "zupt",
+      "reference_sha256": "61cfc3322f4362318a2587fb33b241456198020c515da4631e9d368fa614a0ce"
+    },
+    {
+      "path": "src/zupt_cpuid.c",
+      "upstream": "zupt",
+      "reference_sha256": "a5c0a57599076c380932dcb396067a3f4f5adb0404ba6b4ff4fc46900d97f4a9"
+    },
+    {
+      "path": "src/zupt_crypto.c",
+      "upstream": "zupt",
+      "reference_sha256": "66ff746eeebefb70c924e54f0a8d69c5db01e50de6b68148d3475c8b5a0b3da2"
+    },
+    {
+      "path": "src/zupt_dedup.c",
+      "upstream": "zupt",
+      "reference_sha256": "416d1220ffdb66be86d4ee94506c089ea98c267fbba3b1b704304987767fbc5e"
+    },
+    {
+      "path": "src/zupt_disk.c",
+      "upstream": "zupt",
+      "reference_sha256": "7af747cfba256ea41ac73d264eac29f0f8fd4f7169f9ec90d01892847518ff4b"
+    },
+    {
+      "path": "src/zupt_filetype.c",
+      "upstream": "zupt",
+      "reference_sha256": "7ac77d6d7efa74a088e1a8eb0c2c4c8a8d1f6bd2e69e9e7a4ac58357b676c0a4"
+    },
+    {
+      "path": "src/zupt_format.c",
+      "upstream": "zupt",
+      "reference_sha256": "322c9f89130ad586784e0ca332808b78f32a2352ea988ab8d909ac2547b8c245"
+    },
+    {
+      "path": "src/zupt_internal.h",
+      "upstream": "zupt",
+      "reference_sha256": "85724b45b2b21178d891548b59fd0d77cdcefc528cdb7a56b0e67530e3985b49"
+    },
+    {
+      "path": "src/zupt_keccak.c",
+      "upstream": "zupt",
+      "reference_sha256": "bc3b9431b0a223ace0839b1e82093b4f9a0166a7ed2d5ffbfe5d45a1376bc39e"
+    },
+    {
+      "path": "src/zupt_lz.c",
+      "upstream": "zupt",
+      "reference_sha256": "8e2bc1b335780379904a58f19888432c1f2b5132898a70943e297fd5533121e3"
+    },
+    {
+      "path": "src/zupt_lzh.c",
+      "upstream": "zupt",
+      "reference_sha256": "ddd1b08e2f4bf0ccefa4ef34ed553b13e78f9c415a97e1e9d11c2eea82fb6467"
+    },
+    {
+      "path": "src/zupt_mlkem.c",
+      "upstream": "zupt",
+      "reference_sha256": "54002e1370574cb45ef164f7ec97563358fde42308bb5d19de912334a9bc5ec2"
+    },
+    {
+      "path": "src/zupt_mlock.c",
+      "upstream": "zupt",
+      "reference_sha256": "614e187e0c1ed72b2ecae87b2c8a8f89a239e407ade55db591224c50d1365fc9"
+    },
+    {
+      "path": "src/zupt_parallel.c",
+      "upstream": "zupt",
+      "reference_sha256": "e6f5c698f96c361955715c704e5c6151afb000e53036d29d562ea47296425e69"
+    },
+    {
+      "path": "src/zupt_parallel.h",
+      "upstream": "zupt",
+      "reference_sha256": "e76e8ae22856444909269b5ced2ada5308a69d937d0df08f00c205cc434351d7"
+    },
+    {
+      "path": "src/zupt_predict.c",
+      "upstream": "zupt",
+      "reference_sha256": "ea2e8bb13a7a0861e80b334d42a96222a3a7d40e525f16200a1fef9b151b5268"
+    },
+    {
+      "path": "src/zupt_sha256.c",
+      "upstream": "zupt",
+      "reference_sha256": "16ac58289eb5cca2326cc07a3839c4e82f6f6a23316a1c3b14ad39ec691499ba"
+    },
+    {
+      "path": "src/zupt_sha256_shani.c",
+      "upstream": "zupt",
+      "reference_sha256": "a0bfaaad2bb78abbe61cb0bec471d51e7d49f4abd9b622dd386f45e63a989916"
+    },
+    {
+      "path": "src/zupt_thread.h",
+      "upstream": "zupt",
+      "reference_sha256": "2611fd1a34dd1d5543adb49738a07c42858a52d8152f553eefb79d9b41eda16e"
+    },
+    {
+      "path": "src/zupt_x25519.c",
+      "upstream": "zupt",
+      "reference_sha256": "8c8c7297a966858590a000feb079e5489da27c878b0bb5d1e9b8e26878574a8f"
+    },
+    {
+      "path": "src/zupt_xxh.c",
+      "upstream": "zupt",
+      "reference_sha256": "19515b1adc6a2fea90acdae0341b45d2883cc249702f9b1a715f890bc3d076b4"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * vuptsdk Node.js binding test suite
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  * Copyright (c) 2026 Cristian Cezar Moisés
  *
  * Run with:

@@ -1,9 +1,8 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
- * Copyright (c) 2026 Cristian Cezar Moisés
- *
- * Zupt — CPU Feature Detection
- * Copyright (c) 2026 Cristian Cezar Moisés — AGPL-3.0-or-later
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright (c) 2025-2026 Cristian Cezar Moisés
+ * ZUPT — CPU Feature Detection
+ * Copyright (c) 2026 Cristian Cezar Moisés — Apache-2.0
  *
  * Detects AES-NI, PCLMUL, AVX2, SSE4.1 at runtime.
  * Used to dispatch AES-256-CTR to hardware path when available.
@@ -12,7 +11,29 @@
 #include <string.h>
 
 /* Global instance */
-zupt_cpu_features_t zupt_cpu = {0, 0, 0, 0, 0};
+zupt_cpu_features_t zupt_cpu = {0, 0, 0, 0, 0, 0};
+
+#ifdef _WIN32
+#include <windows.h>
+static INIT_ONCE zupt_cpu_once = INIT_ONCE_STATIC_INIT;
+static BOOL CALLBACK zupt_cpu_init_once(PINIT_ONCE once, PVOID parameter, PVOID *context) {
+    (void)once; (void)parameter; (void)context;
+    zupt_detect_cpu(&zupt_cpu);
+    return TRUE;
+}
+void zupt_cpu_init(void) {
+    (void)InitOnceExecuteOnce(&zupt_cpu_once, zupt_cpu_init_once, NULL, NULL);
+}
+#else
+#include <pthread.h>
+static pthread_once_t zupt_cpu_once = PTHREAD_ONCE_INIT;
+static void zupt_cpu_init_once(void) {
+    zupt_detect_cpu(&zupt_cpu);
+}
+void zupt_cpu_init(void) {
+    (void)pthread_once(&zupt_cpu_once, zupt_cpu_init_once);
+}
+#endif
 
 /* ═══════════════════════════════════════════════════════════════════
  * CPUID intrinsics — platform-specific
@@ -99,6 +120,13 @@ void zupt_detect_cpu(zupt_cpu_features_t *f) {
         /* AVX2 also requires AVX (OS XSAVE) to be usable */
         if (f->has_avx && ((ebx >> 5) & 1))
             f->has_avx2 = 1;
+        /* SHA-NI (CPUID.07H:EBX[29]). Uses 128-bit xmm registers and
+         * legacy-SSE encoding, so unlike AVX it needs no XCR0/OSXSAVE
+         * gate — xmm state is part of the baseline x86-64 ABI. We do
+         * pair it with SSE4.1 at the call site (the byte-swap shuffle
+         * for big-endian message scheduling uses pshufb/SSSE3, always
+         * present on any CPU that has SHA-NI). */
+        f->has_shani = (ebx >> 29) & 1;
     }
 }
 

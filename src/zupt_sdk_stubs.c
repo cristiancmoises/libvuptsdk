@@ -14,11 +14,23 @@
  * Downstream users who need the SDK PQ mode should link against the
  * canonical libvuptsdk.so (the prebuilt one) rather than libvuptsdk-base.so.
  *
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  */
 #include "zupt.h"
 #include <stdio.h>
 #include <stddef.h>
+
+int zupt_pqbox_encrypt_init(zupt_keyring_t *kr, const char *pubkeyfile,
+                             uint8_t *header, size_t *header_size) {
+    (void)kr; (void)pubkeyfile; (void)header; (void)header_size;
+    return -1;
+}
+
+int zupt_pqbox_decrypt_init(zupt_keyring_t *kr, const char *privkeyfile,
+                             const uint8_t *header, size_t header_size) {
+    (void)kr; (void)privkeyfile; (void)header; (void)header_size;
+    return -1;
+}
 
 /* All three weak — overridden if zupt_crypto_sdk.c is also linked in. */
 __attribute__((weak))

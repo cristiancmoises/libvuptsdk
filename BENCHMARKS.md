@@ -1,159 +1,107 @@
-# libvuptsdk performance characterization
+# libvuptsdk performance measurements
 
-Last measured: 2026-04-29
-Library: `libvuptsdk-2.0.0` (canonical x86_64 prebuilt)
-Bench source: [`bench/bench_throughput.c`](bench/bench_throughput.c)
+Release: **2.1.0-base.1**. Updated: **2026-09-24**.
 
-This document records measured performance, the methodology used to obtain
-it, and the computational model behind each cost so users can predict their
-own numbers.
+The source API and a separate Bend model were measured on an **Intel Core
+i7-13700HX**, with 16 cores and 24 logical CPUs. These are local measurements
+for the specified inputs. They do not establish a general throughput guarantee
+or infer performance from a proof.
 
----
+## Current source release: SDK before and after
 
-## Reference hardware
+The same public archive API workload was run against **2.0.4-base.1** and
+**2.1.0-base.1**. Both builds used GCC 14.3.0, `-O2`, baseline x86-64 SSE2 and
+no final linker RPATH, on Linux x86-64 with glibc 2.41.
 
-| Property | Value |
-|---|---|
-| CPU | x86_64 generic, 2 cores @ 2.8 GHz |
-| RAM | 9 GB |
-| OS | Ubuntu 24.04, glibc 2.39, GCC 13.3 |
-| Compiler flags | `-O2 -fstack-protector-strong -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now` |
-| AES-NI | yes (verified) |
-| AVX2 | yes (verified) |
+The workload uses deterministic records, explicitly selects VaptVupt, and sets
+one SDK thread. Each size/level combination has one warm-up and five measured
+iterations. Values below are medians. Compression and extraction include SDK
+temporary-file work; they are not isolated codec throughput or encrypted-mode
+benchmarks.
 
-Numbers will differ on production hardware. Most users on a recent desktop
-(8+ cores, AVX2, ~4 GHz) should expect **2-4× the throughput** and **0.5×
-the latency** shown below.
+| Input | Level | Archive bytes, before → after | Compress ms, before → after | Extract ms, before → after |
+|---|---:|---:|---:|---:|
+| 64 KiB | 1 | 10,868 → 10,900 | 0.2611 → 0.2750 | 0.0647 → 0.0733 |
+| 64 KiB | 9 | 3,778 → 3,820 | 12.5702 → 14.1959 | 0.1188 → 0.1197 |
+| 1 MiB | 1 | 87,768 → 87,800 | 1.3669 → 1.5262 | 0.4569 → 0.5313 |
+| 1 MiB | 9 | 7,452 → 3,880 | 28.7571 → 20.9128 | 0.5728 → 0.7447 |
 
----
+The 1 MiB level-9 case compresses faster and smaller on this corpus. Other
+compression cases and all extraction medians are higher in this run; five
+samples do not establish whether small timing differences are significant.
+Format 1.6 adds a 32-byte AIT; the refreshed wrapper also verifies candidate
+compressed frames by decoding them. Level-9 block sizing changes how this
+particular corpus is compressed. The measurements do not isolate each change's
+individual cost or support a universal speedup claim.
 
-## Measured numbers
+The [recorded results](bench/archive-results.json) contain the aggregate
+medians and archive sizes. To measure the current build:
 
-All values are wall-clock medians from 100 samples (Argon2id from 20). The
-"p99" column shows the 99th percentile to help identify tail-latency cases
-(usually GC pauses or first-call resolver costs).
-
-### Public-key (PQ hybrid) operations
-
-| Operation | Median | p99 | Min | Notes |
-|---|---|---|---|---|
-| `easy_keygen` | 478 μs | 1,202 μs | 370 μs | ML-KEM-768 keygen + X25519 keygen + write 2 files |
-| `easy_encrypt` (64 B msg) | 428 μs | 31,462 μs* | 365 μs | KEM-encaps dominates |
-| `easy_encrypt` (4 KB msg) | 436 μs | 37,011 μs* | 381 μs | KEM still dominates |
-| `easy_decrypt` (64 B msg) | 443 μs | 586 μs | 389 μs | KEM-decaps + AEAD verify |
-| `easy_decrypt` (4 KB msg) | 500 μs | 24,917 μs* | 404 μs | + AEAD decrypt body |
-
-*p99 outliers are first-call resolver costs and OS scheduling — not
-algorithmic.
-
-### Sustained encrypt throughput
-
-| Message size | Iterations | Throughput |
-|---|---|---|
-| 1 KB | 100 | 1.0 MB/s (KEM-bound) |
-| 64 KB | 100 | 47 MB/s |
-| 1 MB | 100 | 153 MB/s |
-| 16 MB | 10 | 182 MB/s |
-
-The asymptotic throughput is the AEAD speed (~180 MB/s in this 2-CPU
-sandbox; expect 400-700 MB/s on modern desktop hardware with AVX2).
-
-### Symmetric / field encryption
-
-| Operation | Time | Notes |
-|---|---|---|
-| `easy_encrypt_field` (email-sized string) | **5.8 μs** | Suitable for high-volume DB column encryption |
-
-### Password-based encryption
-
-| Operation | Time | Notes |
-|---|---|---|
-| `easy_encrypt_password` (Argon2id 64MB, t=3, p=1) | **1.09 sec** | RFC 9106 IETF recommendation |
-
-⚠️  **The README previously claimed ~250 ms.** Measured median is ~1.1 sec
-on this 2-CPU sandbox. On modern desktop hardware (8+ cores) Argon2id with
-identical parameters will measure 200-400 ms because the `m=64MB t=3` work
-is partially memory-bandwidth bound, partially CPU-bound. The library
-parameters are unchanged; only the documentation has been corrected.
-
-If your throughput requirements demand a faster KDF, you can use lower
-Argon2id parameters via the lifecycle API (`zuptsdk_password_params_*`).
-The defaults are conservative because password encryption is a one-time
-operation per user session, where 1 second of work is acceptable in
-exchange for adversary work amplification.
-
----
-
-## Cost model
-
-To estimate your own workload, compose these costs:
-
-```
-encrypt(msg)         ~= 400 μs  +  msg_bytes / aead_throughput
-decrypt(msg)         ~= 450 μs  +  msg_bytes / aead_throughput
-keygen()             ~= 470 μs
-encrypt_field(str)   ~= 5 μs    +  len(str) / aead_throughput  (very small)
-encrypt_password()   ~= 1.1 s   (Argon2id 64MB,t=3 — adjust via params API)
-derive_key()         ~= 1.1 s   (same Argon2id work)
+```sh
+make -j4
+python3 bench/bench_archive.py build/libvuptsdk-base.so --iterations 5
 ```
 
-The 400-470 μs constant overhead is dominated by ML-KEM-768 + X25519
-keygen/encaps/decaps + HKDF combiner + I/O syscalls. On modern hardware
-this drops to 100-200 μs; in cloud VMs with no AES-NI it can rise to 1-2 ms.
+To repeat the comparison, build the earlier `2.0.4-base.1` source revision in a
+separate directory and run the same script against its library path. The
+baseline binary is not shipped with this release. Retain the printed JSON and
+record your compiler and machine when comparing runs.
 
-## Choosing the right API
+## Bend model: measured native CPU comparison
 
-| Use case | Recommended API | Why |
-|---|---|---|
-| 1-1 messaging (small msgs, ≤ 100/sec) | `easy_encrypt` / `easy_decrypt` | Simplest API; KEM cost amortizes |
-| Bulk file encryption | `easy_encrypt_file` | Streamed; no memory pressure |
-| DB column encryption (≤ 100k ops/sec) | `easy_encrypt_field` + `easy_derive_key` | One Argon2id at startup, then 5 μs per field |
-| User-facing password encryption | `easy_encrypt_password` | Argon2id parameters provide 1-sec wall-clock work — appropriate vs. brute force |
-| High-throughput streaming | `zuptsdk_encrypt_stream_pq` (lifecycle API) | Re-key per chunk; constant memory |
+Measured on 2026-09-24 with **Bend 2.0.5**, **Clang 22.1.8**, Linux x86-64,
+glibc 2.41 on the host identified above, and CPU execution only. The same
+native binary was run with 1 and 24 threads, with one warm-up and seven
+measured samples per configuration.
 
----
+The workload generates a binary tree with 2²⁰ leaves, assigns each leaf a byte
+count of `(index % 256) + 1`, and reduces its count and sum. Both configurations
+returned **1,048,576 leaves** and **134,742,016 bytes**.
 
-## Reproducing these numbers
+| Native CPU configuration | Median wall time |
+|---|---:|
+| 1 thread | 0.021306821 s |
+| 24 threads | 0.006099247 s |
+| Ratio of medians, 1 thread / 24 threads | 3.49× |
 
-```bash
-make
-cc -O2 -Iinclude bench/bench_throughput.c \
-   prebuilt/libvuptsdk.so.2.0.0 \
-   -Wl,-rpath,$PWD/prebuilt \
-   -o /tmp/bench -lpthread -lm
-LD_LIBRARY_PATH=prebuilt /tmp/bench
+Timing includes tree generation, reduction, process startup and output. This
+comparison measures the pure Bend model; it does not measure a speedup of the
+C SDK, codec or cryptography. No Bend subprocess is added to an SDK operation,
+and no GPU benchmark is claimed.
+
+Reproduce the law check and native benchmark from the repository root:
+
+```sh
+bend PROOF.bend
+python3 formal/benchmark.py --output formal/benchmark-results.json
 ```
 
-Each run takes ~1 minute (mostly Argon2id). Numbers stable to within ±10%
-across runs on the same machine.
+The [raw results](formal/benchmark-results.json) record all samples, toolchain
+versions and source hashes. The benchmark runner builds a native executable;
+timing the default JavaScript runner would measure a different backend. The
+10 laws in [LAWS.bend](LAWS.bend) concern the modeled tree operations and their
+assumptions, not an independently implemented C kernel or an operating system.
 
----
+## Historical full-ABI measurements
 
-## Comparison to peer cryptographic libraries
+The previous report recorded the following on **2026-04-29**, using the
+historical full-ABI **2.0.0** binary on a 2-core x86-64 environment at 2.8 GHz,
+Ubuntu 24.04, GCC 13.3 and `-O2`:
 
-| Library | PQ keygen | PQ encrypt 1KB | Argon2id 64MB |
-|---|---|---|---|
-| **libvuptsdk 2.0.0** (this lib) | 470 μs | 1.0 MB/s | 1.1 sec |
-| libsodium (X25519 only, no PQ) | 80 μs | 12 MB/s | N/A |
-| OQS-OpenSSL (ML-KEM-768) | ~500 μs | similar | N/A |
+| Operation | Recorded result |
+|---|---:|
+| `easy_keygen` | 478 µs median |
+| `easy_encrypt`, 64 bytes | 428 µs median |
+| `easy_decrypt`, 64 bytes | 443 µs median |
+| `easy_encrypt_field` | 5.8 µs median |
+| `easy_encrypt_password`, Argon2id 64 MiB, t=3, p=1 | 1.09 s median |
+| Sustained encryption, 16 MiB messages | 182 MB/s |
 
-libvuptsdk's PQ overhead is comparable to OQS-OpenSSL (the standard PQ
-benchmark). The asymmetric wins of libvuptsdk are: integrated key commitment
-(BLAKE2b-MAC), constant-time AES-NI via Jasmin, and a high-level `easy_*`
-API that handles all the protocol composition correctly.
+These records were not rerun for 2.1.0-base.1, the 2.0.0 binary is not part of
+this release, and the base API does not provide those `easy_*` operations.
+They are retained only to identify the scope of historical performance claims.
+The old [benchmark source](bench/bench_throughput.c) targets the historical full
+ABI. No expected speedup on newer CPUs or comparison against other libraries is
+inferred from these numbers.
 
----
-
-## Performance roadmap
-
-| Optimization | Expected gain | Status |
-|---|---|---|
-| Batch ML-KEM-768 keygen (multi-recipient) | 5-8× throughput on bulk PQ | not started |
-| Streaming AEAD with rekey (constant mem for any size) | unbounded throughput | implemented (lifecycle API), not yet wired into easy_* |
-| AVX-512 ChaCha20 path (SIMD lane width 8) | ~2× AEAD on Skylake-X+ | not started |
-| ARM NEON ChaCha20 (AArch64) | parity with x86_64 | partially implemented |
-| Argon2id with libargon2 reference (faster on AVX2) | ~30% Argon2id speedup | optional dependency, not bundled |
-
----
-
-**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE).
+Copyright 2026 Cristian Cezar Moisés. [Apache-2.0](LICENSE).

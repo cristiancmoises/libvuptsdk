@@ -1,5 +1,11 @@
 # libvuptsdk — ML-KEM-768 Conformance Fix
 
+> **Historical record.** This report describes the 2026 conformance repair
+> and its dated test results. Its source hashes and prior differential results
+> do not identify the current 2.1.0-base.1 implementation. See
+> [AUDIT.md](AUDIT.md) for checks rerun on the current release; conformance
+> vectors are not a proof of cryptographic security or constant-time behavior.
+
 **Date:** 2026-07-02
 **Engineer:** Cristian Cezar Moisés — Security Ops (*In Code We Trust*) · sac@securityops.co
 **Component:** `src/zupt_mlkem.c` (ML-KEM-768, FIPS 203)

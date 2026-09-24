@@ -1,14 +1,15 @@
 /*
- * VaptVupt — libvuptsdk Integration API
- * SPDX-License-Identifier: GPL-3.0-or-later
- * Copyright 2026 Cristian.
+ * VaptVupt — VaptVupt Integration API
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright (c) 2026 Cristian Cezar Moisés
  *
- * SDK-COMPAT: This internal API wraps VaptVupt for SDK archive blocks:
- *   - The nested checksum is disabled because the SDK stores a block checksum
- *     and authenticates encrypted payloads before decompression
- *   - Adaptive window selection (auto-detect optimal wlog per file)
- *   - Level maps to mode: 1=fast, 5=balanced, 9=extreme
- *   - Format-v2 tag blocks stay disabled for the established wire contract
+ * EMBED-COMPAT: This is the API that a host application calls. It wraps the internal
+ * VaptVupt API with the ZUPT backup policy:
+ *   - Internal XXH64 disabled; ZUPT records its own per-block XXH64, and
+ *     encrypted modes additionally authenticate ciphertext and metadata
+ *   - Adaptive window selection and automatic executable filtering
+ *   - Levels 1-2 FAST, 3-7 balanced, and 8-9 extreme
+ *   - Every encoded block is decoded and compared before it is accepted
  *
  * Usage:
  *   size_t bound = vvz_compress_bound(src_len);

@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+# SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Cristian Cezar Moisés
 # Build source-derived libvuptsdk-base RPM and source RPM packages.
 set -eu
@@ -18,11 +18,11 @@ RPM_RELEASE=${RPM_RELEASE:-0.1.base1}
 RPMBUILD_FLAGS=${RPMBUILD_FLAGS:-}
 OUT_DIR=${OUT_DIR:-$(pwd)/dist/packages}
 DIST_NAME=libvuptsdk-base-${RELEASE}
-SOURCE_TAR=dist/${DIST_NAME}.tar.gz
+SOURCE_ZUPT=dist/${DIST_NAME}-src.zupt
 
 make dist
-if [ ! -f "$SOURCE_TAR" ]; then
-    echo "error: expected source archive was not produced: $SOURCE_TAR" >&2
+if [ ! -f "$SOURCE_ZUPT" ]; then
+    echo "error: expected source archive was not produced: $SOURCE_ZUPT" >&2
     exit 1
 fi
 
@@ -31,19 +31,21 @@ TOPDIR=$(mktemp -d "${TMPDIR:-/tmp}/libvuptsdk-rpm.XXXXXXXX")
 trap 'rm -rf -- "$TOPDIR"' EXIT HUP INT TERM
 mkdir -p "$TOPDIR/BUILD" "$TOPDIR/BUILDROOT" "$TOPDIR/RPMS" \
     "$TOPDIR/SOURCES" "$TOPDIR/SPECS" "$TOPDIR/SRPMS"
-cp "$SOURCE_TAR" "$TOPDIR/SOURCES/"
+cp "$SOURCE_ZUPT" "$TOPDIR/SOURCES/"
 
 cat > "$TOPDIR/SPECS/libvuptsdk-base.spec" <<EOF
 Name:           libvuptsdk-base
 Version:        $VERSION
 Release:        $RPM_RELEASE%{?dist}
 Summary:        Source-built VaptVupt archive SDK
-License:        AGPL-3.0-or-later AND GPL-3.0-or-later
+License:        Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CC0-1.0
 URL:            https://git.securityops.co/cristiancmoises/libvuptsdk
-Source0:        ${DIST_NAME}.tar.gz
+Source0:        ${DIST_NAME}-src.zupt
 
 BuildRequires:  gcc
 BuildRequires:  make
+BuildRequires:  python3
+BuildRequires:  zupt >= 5.2.9
 
 %description
 libvuptsdk-base provides a reproducible archive API backed by the VaptVupt
@@ -59,7 +61,10 @@ The supported public header, static library and pkg-config metadata for
 libvuptsdk-base $RELEASE.
 
 %prep
-%setup -q -n $DIST_NAME
+%setup -q -c -T -n $DIST_NAME
+zupt extract -o . %{SOURCE0}
+cp -a $DIST_NAME/. .
+rm -rf -- $DIST_NAME
 
 %build
 %make_build
@@ -74,7 +79,7 @@ libvuptsdk-base $RELEASE.
 %{_libdir}/libvuptsdk-base.so.$VERSION
 %{_libdir}/libvuptsdk-base.so.$SOVERSION
 %doc README.md README.pt-BR.md CHANGELOG.md SECURITY.md NOTICE
-%license LICENSE LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL
+%license LICENSE LICENSE-BSD-2-Clause LICENSE-BSD-3-Clause LICENSE-CC0-1.0
 
 %files devel
 %{_libdir}/libvuptsdk-base.so
@@ -84,7 +89,7 @@ libvuptsdk-base $RELEASE.
 %doc doc/API_REFERENCE.md doc/API_REFERENCE.pt-BR.md doc/example.c
 
 %changelog
-* Sun Sep 06 2026 Cristian Cezar Moisés <zupt@riseup.net> - $VERSION-$RPM_RELEASE
+* Thu Sep 24 2026 Cristian Cezar Moisés <zupt@riseup.net> - $VERSION-$RPM_RELEASE
 - Publish the source-built base SDK with VaptVupt 2.65.11
 EOF
 

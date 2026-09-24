@@ -1,7 +1,6 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
- * Copyright (c) 2026 Cristian Cezar Moisés
- *
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright (c) 2025-2026 Cristian Cezar Moisés
  * ZUPT v0.6.0 — Parallel Compress / Decompress Pipeline
  *
  * Batch-parallel design: the main thread reads N blocks (N = thread_count),

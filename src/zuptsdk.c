@@ -2,7 +2,7 @@
  * libvuptsdk implementation — wraps zupt's internal API
  *
  * Copyright (c) 2026 Cristian Cezar Moisés
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #define _DEFAULT_SOURCE 1
@@ -15,6 +15,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include "zupt_internal.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -305,6 +306,7 @@ struct zuptsdk_ctx {
     zuptsdk_log_level_t  log_level;
     void                *log_ud;
     uint64_t             max_decompressed;
+    int                  allow_legacy_no_ait;
 };
 
 int zuptsdk_ctx_create(zuptsdk_ctx_t **ctx_out) {
@@ -336,6 +338,13 @@ int zuptsdk_ctx_set_threads(zuptsdk_ctx_t *ctx, int threads) {
 int zuptsdk_ctx_set_max_decompressed(zuptsdk_ctx_t *ctx, uint64_t max_bytes) {
     if (!ctx) return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "ctx is NULL");
     ctx->max_decompressed = max_bytes;
+    return ZUPTSDK_OK;
+}
+
+int zuptsdk_ctx_set_allow_legacy_no_ait(zuptsdk_ctx_t *ctx, int allow) {
+    if (!ctx || (allow != 0 && allow != 1))
+        return ZSDK_FAIL(ZUPTSDK_ERR_INVALID_ARG, "ctx required and allow must be 0 or 1");
+    ctx->allow_legacy_no_ait = allow;
     return ZUPTSDK_OK;
 }
 
@@ -519,6 +528,10 @@ static void zsdk_apply_options(zupt_options_t *zopts,
                                const zuptsdk_ctx_t *ctx) {
     zupt_default_options(zopts);
     zopts->quiet = 1;
+    /* The source base API uses its native password backend. */
+    zopts->kdf_legacy_pbkdf2 = 1;
+    if (ctx && ctx->allow_legacy_no_ait)
+        zupt_internal_allow_legacy_no_ait(zopts);
     zopts->max_output_size = ctx ? ctx->max_decompressed
                                   : ZSDK_DEFAULT_MAX_DECOMPRESSED;
     if (sdk_opts) {
@@ -1228,7 +1241,10 @@ int zuptsdk_archive_info_read(zuptsdk_ctx_t *ctx,
      * missing footer as partial metadata rather than reading before the
      * supplied buffer, and saturate the legacy uint32 getter. */
     if (archive_sz >= sizeof(zupt_archive_header_t) + sizeof(zupt_footer_t)) {
-        const uint8_t *footer = archive + archive_sz - sizeof(zupt_footer_t);
+        size_t trailer_size = archive[7] >= 5 ? ZUPT_AIT_SIZE : 0;
+        if (archive_sz < sizeof(zupt_archive_header_t) + sizeof(zupt_footer_t) + trailer_size)
+            trailer_size = 0;
+        const uint8_t *footer = archive + archive_sz - sizeof(zupt_footer_t) - trailer_size;
         uint64_t index_offset = 0;
         uint32_t footer_version = (uint32_t)footer[28]
                                 | ((uint32_t)footer[29] << 8)
@@ -1238,7 +1254,7 @@ int zuptsdk_archive_info_read(zuptsdk_ctx_t *ctx,
             index_offset |= (uint64_t)footer[k] << (k * 8);
         if (memcmp(footer + 24, "ZEND", 4) == 0 && footer_version == 1 &&
             index_offset >= sizeof(zupt_archive_header_t) &&
-            index_offset < archive_sz - sizeof(zupt_footer_t)) {
+            index_offset < archive_sz - sizeof(zupt_footer_t) - trailer_size) {
             uint64_t blocks = 0;
             for (int k = 0; k < 8; k++)
                 blocks |= (uint64_t)footer[8 + k] << (k * 8);

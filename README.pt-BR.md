@@ -1,159 +1,197 @@
 # libvuptsdk
 
-[English](README.md) | Português do Brasil
+[![Licença: Apache-2.0](https://img.shields.io/badge/Licen%C3%A7a-Apache--2.0-blue.svg)](LICENSE)
+[English](README.md)
 
-`libvuptsdk` fornece uma ABI C para recursos criptográficos e de arquivo usados
-por aplicações clientes. **Zupt é um consumidor existente e separado; seu nome
-não é alterado por este projeto.** A aplicação VaptVupt é relacionada, mas não
-é intercambiável com Zupt, com este SDK ou com o codec independente. O
-repositório contém uma biblioteca base compilável a partir do código-fonte e
-um binário completo antigo. Essas duas variantes não têm o mesmo escopo nem o
-mesmo estado de atualização.
+**SDK em C para criar, verificar e extrair arquivos Zupt.**
 
-## Estado desta árvore
+O lançamento por código-fonte **2.1.0-base.1** integra o motor de arquivos
+**Zupt 5.2.9** e o **codec VaptVupt 2.65.11**. Fornece bibliotecas compartilhada
+e estática, uma API C opaca e o módulo `vuptsdk-base` do pkg-config. Zupt, a
+aplicação VaptVupt, o codec independente e este SDK continuam sendo projetos
+separados.
 
-- Pré-lançamento compilável: **2.0.4-base.1**
-  (`libvuptsdk-base.so.2`).
-- Codec incorporado na compilação por código-fonte: **VaptVupt 2.65.11**,
-  sincronizado do commit
-  `1cc78bce90619dbf97e0ed1ad449c3c4f6329041`.
-- O codec mantém sua licença `GPL-3.0-or-later`; ele não foi relicenciado para
-  satisfazer a política de licenciamento do SDK.
-- A versão completa congelada permanece **2.0.3** e é usada somente pelo alvo
-  explícito `make legacy-test`.
+Copyright 2026 Cristian Cezar Moisés. O código de primeira parte está sob a
+[Apache-2.0](LICENSE); os avisos de terceiros preservados estão em [NOTICE](NOTICE).
 
-## Duas bibliotecas, dois escopos
+## Lançamento e compatibilidade
 
-| Artefato | Origem | Conteúdo | Situação |
-|---|---|---|---|
-| `libvuptsdk-base.so` / `libvuptsdk-base.a` | Compilado deste repositório | Subconjunto `ZUPTSDK_1.0` e o limitador `ZUPTSDK_1.1`, incluindo o codec atual | Artefato atual de pré-lançamento |
-| `libvuptsdk.so` | Arquivo em `prebuilt/` | ABI completa `ZUPTSDK_1.0` + `ZUPTSDK_2.1` | Binário x86-64 congelado; somente compatibilidade |
+| Artefato | Versão | Escopo |
+|---|---|---|
+| `libvuptsdk-base.so.2` / `libvuptsdk-base.a` | 2.1.0-base.1 | API de arquivos compilável; versões de ABI `ZUPTSDK_1.0`, `1.1`, `1.2` |
+| `prebuilt/libvuptsdk.so.2.0.3` | 2.0.3 congelada | ABI completa histórica; excluída da instalação e dos pacotes de lançamento |
 
-A árvore pública ainda não contém o código de algumas funções `easy_*` e de
-outros símbolos exclusivos da biblioteca completa. Por isso, o binário em
-`prebuilt/` não pode ser regenerado honestamente apenas com este repositório.
-Não renomeie esse arquivo para uma versão nova nem afirme que ele contém o
-codec 2.65.11. Ele não é instalado, empacotado nem anexado ao lançamento base.
-Consulte [SECURITY.md](SECURITY.md) para as demais limitações.
+A versão base é um pré-lançamento. O binário congelado possui funções `easy_*`,
+métricas e criptografia por streaming cujo código-fonte completo não está neste
+repositório. Os bindings históricos usam esse binário e não são bindings da
+base. Atualizações do código-fonte não atualizam o binário congelado.
 
-## Compilar e testar
+Os novos arquivos usam o formato Zupt **1.6**, com trailer de integridade do
+arquivo (AIT), e exigem um leitor atualizado. A leitura de arquivos antigos
+confiáveis sem AIT exige uma opção explícita no contexto; consulte o
+[guia de migração](doc/API_REFERENCE.pt-BR.md#compatibilidade-de-arquivos).
 
-Requisitos básicos: compilador C11, GNU Make, binutils e uma implementação de
-`pthread`.
+## Compilar, testar e instalar
+
+Requisitos: compilador C11, GNU Make, binutils, pthreads, Python 3 para as
+ferramentas de teste/pacote e `pkg-config` para compilar aplicações. O Zupt é necessário para extrair os downloads `.zupt`;
+não é uma dependência de execução do SDK. Se o compilador não tiver o alias
+`cc`, acrescente `CC=gcc` (ou `CC=clang`) a cada comando `make` e use esse
+compilador no lugar de `cc` abaixo.
 
 ```sh
-make
+make -j4
 make test
-make test-asan
+sudo make install
+sudo ldconfig                 # cache de bibliotecas compartilhadas no Linux
 ```
 
-`make test` executa doze verificações públicas da variante compilada, inclusive
-ciclos reais sem criptografia, com senha e com chave híbrida, 57 testes focados
-do codec e a verificação das licenças por arquivo. `make test-asan` recompila a
-variante com AddressSanitizer e UndefinedBehaviorSanitizer. Use `make
-legacy-test` somente para verificar o binário 2.0.3 congelado.
+O prefixo padrão é `/usr/local`; use `make install PREFIX=/seu/prefixo` para
+outro destino. O header público é instalado em `include/libvuptsdk-base/`,
+separado do SDK antigo.
 
-Para produzir o arquivo-fonte determinístico:
+```sh
+pkg-config --modversion vuptsdk-base   # 2.1.0-base.1
+cc doc/example.c $(pkg-config --cflags --libs vuptsdk-base) -o exemplo
+./exemplo
+```
+
+O [exemplo](doc/example.c) compacta um buffer com VaptVupt, verifica o arquivo e
+confere a extração byte a byte. A [referência da API](doc/API_REFERENCE.pt-BR.md)
+explica posse de memória, arquivos criptografados, integração com backend e
+migração.
+
+Para executar AddressSanitizer e UndefinedBehaviorSanitizer:
+
+```sh
+make test-asan
+make clean
+make -j4                     # restaura a compilação normal antes da instalação
+```
+
+No x86-64, a compilação padrão usa a base da arquitetura.
+`VV_SIMD_FLAGS=-mavx2` é uma escolha explícita que faz todo o artefato do codec
+exigir AVX2. O suporte de execução em outras plataformas está limitado às
+evidências de [AUDIT.md](AUDIT.md).
+
+As verificações opcionais do modelo usam `make test-proof` com Bend 2.0.5. As
+leis provam propriedades de contagem e soma em árvores modeladas; não provam o
+SDK em C nem a criptografia. As medições do modelo em CPU estão em
+[BENCHMARKS.md](BENCHMARKS.md).
+
+## Baixar, verificar e extrair
+
+Os lançamentos são publicados nos quatro [hosts do repositório](#repositórios-e-proveniência).
+Os novos pacotes usam `.zupt` a partir da versão 2.1.0-base.1; lançamentos e
+pacotes anteriores mantêm seus nomes e formatos originais. Os downloads
+principais são:
+
+- `libvuptsdk-base-2.1.0-base.1-src.zupt`: código-fonte, testes e documentação do produto.
+- `libvuptsdk-base-2.1.0-base.1-linux-x86_64.zupt`: biblioteca Linux x86-64, header e instalador.
+- `SHA256SUMS`, `SHA256SUMS.asc` e `release-key.asc`: checksums, assinatura destacada e chave pública de assinatura.
+
+Compare a impressão digital da chave pública com uma cópia confiável antes de
+importá-la:
+
+```text
+0CFA 43B9 AA96 42EA AF2B E983 C4C6 61C9 ECFB 46E8
+```
+
+```sh
+gpg --show-keys --with-fingerprint release-key.asc
+gpg --import release-key.asc
+gpg --verify SHA256SUMS.asc SHA256SUMS
+sha256sum --ignore-missing --check SHA256SUMS
+```
+
+Confirme que cada arquivo baixado apresenta `OK`. Depois, use o Zupt 5.2.9 ou
+um leitor mais novo compatível. Use um destino novo; a extração recusa
+substituir arquivos existentes. As opções de extração devem vir antes do nome
+do arquivo:
+
+```sh
+zupt test libvuptsdk-base-2.1.0-base.1-src.zupt
+zupt extract -o ./source libvuptsdk-base-2.1.0-base.1-src.zupt
+cd source/libvuptsdk-base-2.1.0-base.1
+make -j4
+make test
+```
+
+Se o Zupt 5.2.9 indicar erro de permissão no caminho de saída, use a
+[alternativa com diretório temporário](doc/TROUBLESHOOTING.md#zupt-529-output-directory-permissions--permissões-do-diretório-de-saída).
+
+Para o pacote binário, confira o checksum como acima e execute:
+
+```sh
+zupt test libvuptsdk-base-2.1.0-base.1-linux-x86_64.zupt
+zupt extract -o ./binary libvuptsdk-base-2.1.0-base.1-linux-x86_64.zupt
+cd binary/libvuptsdk-base-2.1.0-base.1-linux-x86_64
+sudo sh install.sh
+```
+
+O binário exige **Linux x86-64 e glibc 2.34 ou superior**; foi testado com
+glibc 2.41. O instalador usa `/usr/local` por padrão e aceita a variável
+`PREFIX`. Compile a partir do código-fonte se esses requisitos não
+corresponderem ao seu sistema. Os scripts
+`packaging/build-deb.sh` e `packaging/build-rpm.sh` também geram candidatos a
+pacotes Debian e RPM.
+
+O checksum detecta corrupção; a assinatura GPG verificada identifica quem
+assinou a lista de checksums. O selo de assinatura de um host Git é um recurso
+separado. O contêiner `.zupt` inclui identificador aleatório e data de criação;
+reconstruir o mesmo conteúdo não implica obter bytes idênticos no arquivo.
+
+Para criar novos pacotes de lançamento a partir de um checkout Git:
 
 ```sh
 make dist
+make dist-binary
+make test-package
 ```
 
-O arquivo `libvuptsdk-base-2.0.4-base.1.tar.gz` inclui os avisos e textos de
-licença do SDK e do codec, mas não inclui a biblioteca completa congelada. Os
-scripts abaixo geram candidatos nativos separados, sem fingir que fornecem a
-ABI completa:
+Os comandos exigem Python 3 e Zupt; o pacote binário também usa `strip` e
+`readelf`, do binutils. Selecione outra CLI com
+`ZUPT=/caminho/para/zupt make dist`. O empacotador usa VaptVupt, modo sólido e
+nível 9. O pacote-fonte inclui arquivos rastreados pelo Git; adicione novos
+arquivos ao índice antes de empacotar. Um pacote-fonte extraído pode ser
+reexportado sem Git enquanto os checksums de `SOURCE-MANIFEST.json` coincidirem;
+use um checkout Git para empacotar código modificado. O gate binário rejeita
+RPATH/RUNPATH e os testes de pacote comparam o conteúdo depois da extração.
 
-```sh
-packaging/build-deb.sh
-packaging/build-rpm.sh
-```
+## Integração com backend e segurança
 
-Os pacotes Debian se chamam `libvuptsdk-base2` e
-`libvuptsdk-base-dev`; os RPMs usam `libvuptsdk-base` e
-`libvuptsdk-base-devel`. Os scripts recusam uma biblioteca que contenha
-RPATH/RUNPATH. Os arquivos anexados ao lançamento não são assinados por uma
-distribuição; valide-os com `SHA256SUMS`.
+Use um contexto por tarefa concorrente, configure o orçamento de extração com
+`zuptsdk_ctx_set_max_decompressed()` e libere os buffers retornados com
+`zuptsdk_free()`. O teto padrão de extração é 16 GiB; escolha um limite menor
+adequado ao serviço. Tamanho da entrada, memória do processo, tempo de CPU e
+espaço temporário em disco precisam de limites próprios. A API de I/O por
+callbacks usa arquivos temporários e não implementa streaming de memória
+constante.
 
-No x86-64, a compilação padrão usa a base SSE2 da arquitetura e não força AVX2.
-Definir `VV_SIMD_FLAGS=-mavx2` é uma opção explícita que faz todo o artefato do
-codec exigir um processador com AVX2.
+A API por código-fonte oferece arquivos sem criptografia, com senha PBKDF2 e
+com chave híbrida ML-KEM-768/X25519. Os checksums de arquivos sem criptografia
+não autenticam o remetente. Consulte [SECURITY.md](SECURITY.md) para o escopo
+criptográfico e as limitações conhecidas. Comunique vulnerabilidades de forma
+privada para **zupt@riseup.net**.
 
-## Uso mínimo da ABI pública
+## Repositórios e proveniência
 
-```c
-#include <stdio.h>
-#include <zuptsdk.h>
+| Projeto ou host | Local |
+|---|---|
+| SDK, principal | [git.securityops.co](https://git.securityops.co/cristiancmoises/libvuptsdk) |
+| Mirror do SDK | [GitHub](https://github.com/cristiancmoises/libvuptsdk) |
+| Mirror do SDK | [Codeberg](https://codeberg.org/berkeley/libvuptsdk) |
+| Mirror do SDK | [git.securityops.com.br](https://git.securityops.com.br/cristiancmoises/libvuptsdk) |
+| Aplicação VaptVupt | [vaptvupt](https://git.securityops.co/cristiancmoises/vaptvupt) |
+| Codec independente | [vaptvupt-codec](https://git.securityops.co/cristiancmoises/vaptvupt-codec) |
 
-int main(void)
-{
-    printf("libvuptsdk %s\n", zuptsdk_version_string());
-    return 0;
-}
-```
+Revisões importadas:
 
-Compile com os dados do `pkg-config`:
+- Zupt **5.2.9**: `63f27dd0c5afcf155f813a069c29f6384d46790c`.
+- Codec VaptVupt **2.65.11**: `1cc78bce90619dbf97e0ed1ad449c3c4f6329041`.
 
-```sh
-cc exemplo.c $(pkg-config --cflags --libs vuptsdk-base) -o exemplo
-```
-
-A referência da API está em
-[doc/API_REFERENCE.md](doc/API_REFERENCE.md), com uma versão em português em
-[doc/API_REFERENCE.pt-BR.md](doc/API_REFERENCE.pt-BR.md). Um exemplo mínimo
-fica em [doc/example.c](doc/example.c).
-
-As extrações da biblioteca base têm limite total padrão de 16 GiB. Ajuste-o
-por contexto com `zuptsdk_ctx_set_max_decompressed()`; zero remove o limite e
-não é recomendado para arquivos não confiáveis. O setter antigo no objeto de
-opções é mantido apenas para compatibilidade e não controla a extração.
-
-## Contrato do codec incorporado
-
-O wrapper interno preserva o formato já usado pelos arquivos do SDK:
-
-- níveis 1–2 usam o modo rápido, 3–7 usam o balanceado e 8–9 usam o extremo;
-- blocos com tags do formato v2 permanecem desativados;
-- o checksum interno do frame é omitido porque o contêiner do SDK armazena um
-  XXH64 do bloco descomprimido e autentica o payload quando há criptografia;
-- o decoder aceita os frames legados cobertos pelos testes de compatibilidade;
-- os filtros BCJ continuam opt-in no codec e são invertidos automaticamente
-  pelo decoder.
-
-Quem chamar as funções internas `vvz_*` fora do fluxo normal do SDK precisa
-fornecer uma verificação de integridade equivalente. Elas não fazem parte dos
-headers instalados como ABI pública.
-
-## Segurança
-
-Leia [SECURITY.md](SECURITY.md) antes de implantar a biblioteca. O documento
-descreve o modelo de ameaça, os algoritmos, a cobertura de testes e as
-limitações conhecidas. Vulnerabilidades devem ser comunicadas de forma privada
-para `zupt@riseup.net`.
-
-Resultados de testes internos não substituem uma auditoria independente. A
-biblioteca completa pré-compilada também não deve herdar automaticamente as
-afirmações verificadas apenas na compilação por código-fonte.
-
-## Licenças
-
-O código de primeira parte do SDK identificado com
-`AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial` está disponível sob a
-AGPL ou sob um contrato comercial assinado separadamente. O aviso comercial
-não é, por si só, uma licença.
-
-Os arquivos incorporados do VaptVupt identificados com
-`GPL-3.0-or-later` permanecem sob a GPL. Veja [NOTICE](NOTICE),
-[LICENSE-AGPL-3.0](LICENSE-AGPL-3.0),
-[LICENSE-GPL-3.0](LICENSE-GPL-3.0) e
-[LICENSE-COMMERCIAL](LICENSE-COMMERCIAL).
-
-## Repositórios
-
-- Principal: <https://git.securityops.co/cristiancmoises/libvuptsdk>
-- Mirror no GitHub: <https://github.com/cristiancmoises/libvuptsdk>
-- Mirror no Codeberg: <https://codeberg.org/berkeley/libvuptsdk>
-- Mirror em securityops.com.br:
-  <https://git.securityops.com.br/cristiancmoises/libvuptsdk>
-- Aplicação VaptVupt: <https://git.securityops.co/cristiancmoises/vaptvupt>
-- Codec VaptVupt: <https://git.securityops.co/cristiancmoises/vaptvupt-codec>
+O SDK mantém adaptações para sua ABI pública e compilação. [NOTICE](NOTICE)
+registra proveniência e obrigações de terceiros; o binário congelado mantém
+seu licenciamento histórico. Consulte [CHANGELOG.md](CHANGELOG.md),
+[AUDIT.md](AUDIT.md), [BENCHMARKS.md](BENCHMARKS.md) e a
+[solução de problemas](doc/TROUBLESHOOTING.md).

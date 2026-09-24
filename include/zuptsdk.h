@@ -2,7 +2,7 @@
  * libvuptsdk — Public C ABI for cryptographic and archive services
  *
  * Copyright (c) 2026 Cristian Cezar Moisés
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Repository:     https://git.securityops.co/cristiancmoises/libvuptsdk
  * Related app:    https://git.securityops.co/cristiancmoises/vaptvupt
@@ -83,9 +83,9 @@ extern "C" {
  * ════════════════════════════════════════════════════════════════════════ */
 
 #define ZUPTSDK_VERSION_MAJOR 2
-#define ZUPTSDK_VERSION_MINOR 0
-#define ZUPTSDK_VERSION_PATCH 4
-#define ZUPTSDK_VERSION_STRING "2.0.4-base.1"
+#define ZUPTSDK_VERSION_MINOR 1
+#define ZUPTSDK_VERSION_PATCH 0
+#define ZUPTSDK_VERSION_STRING "2.1.0-base.1"
 
 /* Compile-time version check helper (negative if header older than required) */
 #define ZUPTSDK_VERSION_AT_LEAST(maj, min, pat) \
@@ -96,7 +96,7 @@ extern "C" {
 
 /**
  * Return the runtime version string of the linked library, e.g.
- * "2.0.4-base.1".
+ * "2.1.0-base.1".
  * The returned pointer is to static storage and must NOT be freed.
  *
  * Use this with the compile-time ZUPTSDK_VERSION_STRING to detect mismatch
@@ -291,6 +291,15 @@ int zuptsdk_ctx_set_threads(zuptsdk_ctx_t *ctx, int threads);
  */
 int zuptsdk_ctx_set_max_decompressed(zuptsdk_ctx_t *ctx,
                                      uint64_t max_bytes);
+
+/**
+ * Explicitly allow trusted legacy archives without an archive-integrity
+ * trailer. Disabled by default. This weakens metadata authentication for old
+ * archives; it never skips verification of a trailer that is present.
+ * allow must be 0 or 1. Returns ZUPTSDK_ERR_INVALID_ARG for any other value
+ * or a NULL context. Available in the ZUPTSDK_1.2 symbol version.
+ */
+int zuptsdk_ctx_set_allow_legacy_no_ait(zuptsdk_ctx_t *ctx, int allow);
 
 /**
  * Reserve a progress callback on this context. The current base prerelease

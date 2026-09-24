@@ -1,6 +1,6 @@
 /*
  * AES-256-GCM-SIV (RFC 8452)
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Nonce-misuse-resistant AEAD. Nonce reuse degrades to deterministic
  * encryption (same plaintext+key+nonce -> same ciphertext) rather than

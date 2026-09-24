@@ -2,7 +2,7 @@
 
 [Português do Brasil](API_REFERENCE.pt-BR.md)
 
-This reference applies to the source-built `2.0.4-base.1` prerelease and the
+This reference applies to the source-built `2.1.0-base.1` prerelease and the
 installed header `libvuptsdk-base/zuptsdk.h`. The header is authoritative for
 signatures and ownership annotations.
 
@@ -17,7 +17,7 @@ cc app.c $(pkg-config --cflags --libs vuptsdk-base) -o app
 ```
 
 Before installation, use `-Iinclude`, link to
-`build/libvuptsdk-base.so.2.0.4`, and provide a runtime library search path.
+`build/libvuptsdk-base.so.2.1.0`, and provide a runtime library search path.
 
 ## Error and ownership rules
 
@@ -93,6 +93,19 @@ Available codec values are `ZUPTSDK_CODEC_AUTO`, `VAPTVUPT`, `LZHP`, `LZH`,
 block-size range. The `AUTO` choice is hardware-adaptive; explicitly choose
 `ZUPTSDK_CODEC_VAPTVUPT` when the archive must use VaptVupt.
 
+## Embedded codec policy
+
+The SDK wrapper maps levels 1–2 to `ULTRA_FAST`, 3–7 to `BALANCED`, and 8–9
+to `EXTREME`. Balanced and extreme modes enable automatic BCJ filtering.
+`format_v2=0` is the codec's automatic selection policy; it does not force every
+frame into an old format. Use current readers for new archives.
+
+Nested frame checksums are disabled because the enclosing archive block has
+its own integrity check. Compression also decodes the candidate frame and
+compares its exact bytes with the input; a rejected candidate lets the caller
+store an uncompressed block. Internal `vvz_*` functions are not public API and
+must not be used without the archive's integrity checks.
+
 ## Buffer archive example
 
 ```c
@@ -131,6 +144,10 @@ int main(void)
 extracts every safe entry. `zuptsdk_compress_buffer()` and
 `zuptsdk_extract_buffer()` are intended for a single logical file. The
 extraction functions reject unsafe relative and absolute paths in the core.
+Verified files are published without replacing existing destinations: a name
+conflict with a file, symlink or FIFO fails the operation and preserves the
+existing target. Use a fresh extraction directory. This is a per-file rule,
+not a transaction over the entire archive.
 
 ## Callback I/O
 
@@ -149,9 +166,13 @@ use matching destroy functions. On tested Linux systems, saving a private key
 establishes mode 0600 before writing, refuses a final-component symbolic link,
 and rejects non-regular output targets.
 
-The source build exposes the hybrid key/archive functions, but the full
-`easy_*` encryption interface remains exclusive to the frozen compatibility
-binary. Read `SECURITY.md` before relying on cryptographic modes.
+The source build supports PBKDF2 password archives and ML-KEM-768/X25519
+hybrid archives. The wrapper explicitly selects PBKDF2; optional upstream
+Argon2 support is not exposed as a base API setting. Pass a secure password
+buffer or recipient key handle to the archive operations, and release it with
+its matching destroy function. The full `easy_*` encryption interface remains
+exclusive to the frozen compatibility binary. Read [SECURITY.md](../SECURITY.md)
+for the precise cryptographic and compatibility limits.
 
 ## Metadata
 
@@ -173,6 +194,75 @@ block device.
 
 The release gate exercises context/options lifecycle, secure zeroing, plain,
 password-authenticated and hybrid-key VaptVupt archive round trips, malformed
-solid input, metadata decoding, the extraction ceiling, 57 embedded-codec
-checks, per-file licensing, and sanitizer builds. Callback notification, disk
+solid input, metadata decoding, the extraction ceiling, archive integrity
+trailers, embedded-codec checks, per-file licensing, and sanitizer builds. Callback notification, disk
 operations, Windows and macOS runtime behavior are not claimed by that gate.
+
+
+## Archive compatibility
+
+Version 2.1.0-base.1 writes Zupt format 1.6, with an archive integrity trailer
+(AIT) after the footer and authenticated block prefaces in encrypted archives.
+Use an updated reader for new archives; the frozen 2.0.3 binary is not a
+compatible replacement reader.
+
+By default, the context rejects archives without AIT. When migrating a
+**trusted** older archive, create a dedicated context and explicitly enable:
+
+```c
+int rc = zuptsdk_ctx_set_allow_legacy_no_ait(ctx, 1);
+/* Check rc, then verify/extract only the trusted legacy archive. */
+```
+
+The setter accepts only 0 or 1 and is exported under `ZUPTSDK_1.2`. Zero is the
+default. This option permits a missing trailer; it does not disable verification
+of a trailer that is present. Prefer rewriting migrated content as a current
+archive and keep the option disabled for incoming untrusted data.
+
+The AIT protects the serialized header and footer prefix. For encrypted
+archives it uses HMAC-SHA256 with the archive MAC key; for plaintext archives
+it uses XXH64 and provides corruption detection only. Payload blocks have their
+own integrity checks. Neither a plaintext checksum nor metadata parsing proves
+who created an archive. Release download signatures are separate GPG signatures
+over `SHA256SUMS`, described in the [README](../README.md#download-verify-and-extract).
+
+## Integrating a backend service
+
+Use the source API through a native C/C++ module or an FFI adapter that links
+`vuptsdk-base`. The existing Python, Node.js, Go and Rust bindings target the
+historical full ABI and cannot be pointed at this library as a drop-in upgrade.
+The installed `zuptsdk.h` is the public contract; internal `vvz_*` and engine
+symbols are hidden and are not backend integration points.
+
+A practical request lifecycle is:
+
+1. Enforce an upload-size limit before passing bytes to the SDK. Create a
+   context for the job and set its thread count and decompressed-byte ceiling.
+2. Run blocking compression or extraction in a bounded worker queue. Account
+   for SDK worker threads when sizing the service's own concurrency.
+3. Use a fresh, application-owned extraction directory for each request and
+   separate quotas for temporary disk space, CPU time and process memory.
+   The decompressed-byte ceiling is not an input or memory budget.
+4. Check every return code. Handle `ZUPTSDK_ERR_TOO_LARGE`, authentication and
+   malformed-input errors as failed jobs; expose application messages to the
+   client and keep `zuptsdk_last_error_detail()` in appropriate server logs.
+5. Publish output only after the operation succeeds. On failure, discard the
+   request directory; extraction does not provide a transaction across all
+   entries in an archive.
+6. Free SDK buffers with `zuptsdk_free()` and destroy options, key handles,
+   password buffers and the context. Configure a custom global allocator only
+   once at process startup, before any SDK calls.
+
+The [buffer example](#buffer-archive-example) is suitable for bounded payloads.
+Use the filesystem API for larger archives. Callback I/O still stages data in
+temporary files and may load buffers into memory; progress and log callback
+registration does not currently deliver notifications. A shared context must
+never serve simultaneous calls, and this release does not claim comprehensive
+race-detector validation of separate contexts.
+
+## License
+
+Copyright 2026 Cristian Cezar Moisés. First-party source and this documentation
+use [Apache-2.0](../LICENSE). Preserve the third-party notices in [NOTICE](../NOTICE).
+Historical binary and binding references do not change the frozen binary's
+license or provide source for its additional API.

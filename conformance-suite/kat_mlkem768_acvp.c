@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  * ML-KEM-768 ACVP Known-Answer-Test driver for libvuptsdk (FIPS 203).
  *
  * Overrides the library's zupt_random_bytes with a seed-injecting stub so
@@ -7,8 +7,7 @@
  * a bit-exact match, "0" otherwise. Wire this into CI as a BLOCKING gate.
  *
  * Build (from a libvuptsdk checkout):
- *   gcc -O2 -Iinclude -Isrc kat_mlkem768_acvp.c \
- *       src/zupt_mlkem.c src/zupt_keccak.c src/zupt_sha256.c -o katz
+ *   sh conformance-suite/build_driver.sh conformance-suite/kat_mlkem768_acvp.c ./katz
  * Modes:
  *   ./katz keygen     <d> <z> <ek> <dk>
  *   ./katz encap      <ek> <m> <c> <k>

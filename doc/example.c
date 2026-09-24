@@ -1,7 +1,7 @@
 /*
  * libvuptsdk-base example: compress a buffer with VaptVupt, verify it,
  * then extract it.
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Build: cc example.c $(pkg-config --cflags --libs vuptsdk-base) -o example
  *        # or, before installation:
@@ -20,7 +20,7 @@ static int die(const char *what, int rc) {
 }
 
 int main(void) {
-    int rc = zuptsdk_version_check(2, 0, 4);
+    int rc = zuptsdk_version_check(2, 1, 0);
     if (rc) return die("version_check", rc);
     printf("libvuptsdk %s\n\n", zuptsdk_version_string());
 

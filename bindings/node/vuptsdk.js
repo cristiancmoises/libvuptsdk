@@ -2,7 +2,7 @@
  * vuptsdk — Node.js bindings for libvuptsdk
  *
  * Copyright (c) 2026 Cristian Cezar Moisés
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Uses koffi (https://www.npmjs.com/package/koffi) for FFI.
  * Install with: npm install koffi

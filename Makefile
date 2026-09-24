@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+# SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Cristian Cezar Moisés
 #
 # ─────────────────────────────────────────────────────────────────────
@@ -7,7 +7,7 @@
 #
 #  Two libraries are shipped:
 #
-#  1. libvuptsdk-base.so.2.0.4  (built from source in this repo)
+#  1. libvuptsdk-base.so.2.1.0  (built from source in this repo)
 #     The compress/extract/archive/options API. ZUPTSDK_1.0 ABI subset.
 #
 #  2. libvuptsdk.so.2.0.3       (legacy prebuilt, in prebuilt/)
@@ -22,13 +22,16 @@
 # ─────────────────────────────────────────────────────────────────────
 
 SDK_VERSION_MAJOR = 2
-SDK_VERSION_MINOR = 0
-SDK_VERSION_PATCH = 4
+SDK_VERSION_MINOR = 1
+SDK_VERSION_PATCH = 0
 SDK_SOVERSION     = $(SDK_VERSION_MAJOR)
 SDK_FULLVERSION   = $(SDK_VERSION_MAJOR).$(SDK_VERSION_MINOR).$(SDK_VERSION_PATCH)
 SDK_PRERELEASE    = base.1
 SDK_RELEASE       = $(SDK_FULLVERSION)-$(SDK_PRERELEASE)
 CODEC_VERSION     = 2.65.11
+ZUPT_VERSION      = 5.2.9
+ZUPT             ?= zupt
+BEND             ?= bend
 
 .DEFAULT_GOAL := all
 
@@ -77,8 +80,8 @@ else
 endif
 
 ZUPT_SOURCES = src/zupt_format.c src/zupt_lz.c src/zupt_lzh.c \
-               src/zupt_xxh.c src/zupt_sha256.c src/zupt_aes256.c \
-               src/zupt_crypto.c src/zupt_sdk_stubs.c \
+               src/zupt_xxh.c src/zupt_sha256.c src/zupt_sha256_shani.c src/zupt_aes256.c \
+               src/zupt_crypto.c src/zupt_ct.c src/zupt_sdk_stubs.c \
                src/zupt_predict.c src/zupt_parallel.c src/zupt_keccak.c \
                src/zupt_x25519.c src/zupt_mlkem.c src/zupt_cpuid.c \
                src/zupt_mlock.c src/zupt_filetype.c src/zupt_disk.c \
@@ -106,6 +109,7 @@ STAGED_LIB       = $(BUILD_DIR)/legacy/libvuptsdk.so.$(PREBUILT_VERSION)
 PKGCONFIG        = $(BUILD_DIR)/vuptsdk-base.pc
 LINKER_MAP    = zuptsdk.map
 CODEC_TEST    = $(BUILD_DIR)/codec_integration_test
+ENGINE_TEST   = $(BUILD_DIR)/engine_regression
 DOC_EXAMPLE   = $(BUILD_DIR)/doc-example
 
 # ── Version query (single source of truth for packaging scripts) ────
@@ -137,6 +141,16 @@ base: $(SOURCE_LIB) $(SOURCE_STATIC) $(PKGCONFIG)
 	@echo "Built the source-based ABI subset with VaptVupt codec 2.65.11."
 
 # ── Compile rules ───────────────────────────────────────────────────
+ifneq ($(filter x86_64 i386 i486 i586 i686,$(ARCH)),)
+SHA_NI_FLAGS = -msha -mssse3 -msse4.1
+endif
+
+$(BUILD_DIR)/zupt_sha256_shani.o: src/zupt_sha256_shani.c include/zupt.h include/zupt_cpuid.h | $(BUILD_DIR)
+	$(Q)echo "  CC  $<"
+	$(Q)$(CC) $(CFLAGS) $(PIC_FLAGS) $(SHA_NI_FLAGS) -Iinclude -Isrc -c $< -o $@
+
+$(PIC_OBJS): include/zupt.h include/zupt_cpuid.h src/zupt_internal.h
+
 $(BUILD_DIR)/vv_%.o: src/vv_%.c $(VV_HEADERS) | $(BUILD_DIR)
 	$(Q)echo "  CC  $<"
 	$(Q)$(CC) $(CFLAGS) $(PIC_FLAGS) $(VV_SIMD_FLAGS) -Iinclude -Isrc -c $< -o $@
@@ -185,7 +199,7 @@ $(STAGED_LIB): $(PREBUILT_LIB) | $(BUILD_DIR)
 # so that DESTDIR= or PREFIX= overrides are honored.
 $(PKGCONFIG): | $(BUILD_DIR)
 	$(Q)echo "  GEN $@"
-	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(BASE_INCLUDEDIR)\n\nName: vuptsdk-base\nDescription: source-built libvuptsdk archive API with VaptVupt codec $(CODEC_VERSION)\nVersion: $(SDK_RELEASE)\nLibs: -L$${libdir} -lvuptsdk-base\nCflags: -I$${includedir}\n' > $@
+	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(BASE_INCLUDEDIR)\n\nName: vuptsdk-base\nDescription: source-built libvuptsdk archive API with VaptVupt codec $(CODEC_VERSION)\nVersion: $(SDK_RELEASE)\nLibs: -L$${libdir} -lvuptsdk-base\nLibs.private: -lpthread -lm\nCflags: -I$${includedir}\n' > $@
 
 # ── Tests ───────────────────────────────────────────────────────────
 $(CODEC_TEST): tests/codec_integration_test.c $(SOURCE_STATIC)
@@ -198,12 +212,16 @@ $(BUILD_DIR)/source_smoke: tests/source_smoke.c $(SOURCE_LIB)
 	$(Q)$(CC) $(CFLAGS) -Iinclude $< $(SOURCE_LIB) \
 		-o $@ $(LDFLAGS) $(LIBS)
 
+$(ENGINE_TEST): tests/engine_regression.c $(SOURCE_STATIC)
+	$(Q)echo "  CC  $<"
+	$(Q)$(CC) $(CFLAGS) -Iinclude -Isrc $< $(SOURCE_STATIC) -o $@ $(LDFLAGS) $(LIBS)
+
 $(DOC_EXAMPLE): doc/example.c $(SOURCE_STATIC)
 	$(Q)echo "  CC  $@"
 	$(Q)$(CC) $(CFLAGS) -Iinclude $< $(SOURCE_STATIC) -o $@ $(LDFLAGS) $(LIBS)
 
 .PHONY: test-source
-test-source: $(BUILD_DIR)/source_smoke $(CODEC_TEST) $(DOC_EXAMPLE)
+test-source: $(BUILD_DIR)/source_smoke $(CODEC_TEST) $(ENGINE_TEST) $(DOC_EXAMPLE)
 	$(Q)echo "═══ libvuptsdk source-only smoke test ═══"
 	$(Q)LD_LIBRARY_PATH=$(BUILD_DIR)$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH} \
 		$(BUILD_DIR)/source_smoke > $(BUILD_DIR)/source_smoke.stdout
@@ -217,6 +235,9 @@ test-source: $(BUILD_DIR)/source_smoke $(CODEC_TEST) $(DOC_EXAMPLE)
 	$(Q)echo ""
 	$(Q)echo "═══ embedded VaptVupt codec integration ═══"
 	$(Q)$(CODEC_TEST)
+	$(Q)echo ""
+	$(Q)echo "═══ Zupt engine integration regressions ═══"
+	$(Q)$(ENGINE_TEST)
 	$(Q)echo ""
 	$(Q)$(MAKE) audit-licenses
 
@@ -267,6 +288,10 @@ test-asan:
 	   $(SOURCE_STATIC) -o $(BUILD_DIR)/codec_integration_test_asan \
 	   -fsanitize=address,undefined -lpthread -lm
 	$(Q)ASAN_OPTIONS=detect_leaks=0 $(BUILD_DIR)/codec_integration_test_asan
+	$(Q)$(CC) -std=c11 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer \
+	   -Iinclude -Isrc tests/engine_regression.c $(SOURCE_STATIC) \
+	   -o $(BUILD_DIR)/engine_regression_asan -fsanitize=address,undefined -lpthread -lm
+	$(Q)ASAN_OPTIONS=detect_leaks=0 $(BUILD_DIR)/engine_regression_asan
 	@echo ""
 	@echo "ASAN build + test complete"
 
@@ -289,7 +314,7 @@ install: base
 	$(INSTALL) -d $(DESTDIR)$(BASE_INCLUDEDIR)
 	$(INSTALL) -m 0644 include/zuptsdk.h $(DESTDIR)$(BASE_INCLUDEDIR)/
 	$(INSTALL) -d $(DESTDIR)$(PKGCONFIGDIR)
-	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(BASE_INCLUDEDIR)\n\nName: vuptsdk-base\nDescription: source-built libvuptsdk archive API with VaptVupt codec $(CODEC_VERSION)\nVersion: $(SDK_RELEASE)\nLibs: -L$${libdir} -lvuptsdk-base\nCflags: -I$${includedir}\n' > $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk-base.pc
+	$(Q)printf 'prefix=$(PREFIX)\nexec_prefix=$${prefix}\nlibdir=$(LIBDIR)\nincludedir=$(BASE_INCLUDEDIR)\n\nName: vuptsdk-base\nDescription: source-built libvuptsdk archive API with VaptVupt codec $(CODEC_VERSION)\nVersion: $(SDK_RELEASE)\nLibs: -L$${libdir} -lvuptsdk-base\nLibs.private: -lpthread -lm\nCflags: -I$${includedir}\n' > $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk-base.pc
 	$(Q)chmod 0644 $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk-base.pc
 
 .PHONY: uninstall
@@ -300,8 +325,7 @@ uninstall:
 	rm -f $(DESTDIR)$(PKGCONFIGDIR)/vuptsdk-base.pc
 
 # ── License audit ───────────────────────────────────────────────────
-# Verifies first-party SDK files use the project dual-license identifier and
-# the embedded VaptVupt core retains its upstream GPL-3.0-or-later identifier.
+# Verifies Apache-2.0 and retained third-party attribution in current sources.
 # Useful as a pre-commit hook.
 # ── Extended local audit (current source plus frozen artifact) ──────
 # Runs source, codec, license, sanitizer, legacy-symbol and historical
@@ -335,34 +359,7 @@ formal-audit:
 
 .PHONY: audit-licenses
 audit-licenses:
-	@MISSING=0; \
-	for f in $$(find . -type f \( -name '*.c' -o -name '*.h' -o -name '*.hpp' \
-	             -o -name '*.py' -o -name '*.sh' -o -name '*.yml' -o -name '*.yaml' \
-	             -o -name '*.jazz' -o -name '*.s' -o -name 'Makefile' \
-	             -o -name '*.map' \) \
-	             -not -path './build/*' -not -path './dist/*' \
-	             -not -path './prebuilt/*' -not -path './.git/*'); do \
-	    case "$$f" in \
-	      ./src/vv_*.c|./src/vaptvupt_api.c|./include/vv_*.h|\
-	      ./include/vaptvupt.h|./include/vaptvupt_api.h) \
-	        EXPECTED='GPL-3.0-or-later' ;; \
-	      ./tests/codec_integration_test.c) \
-	        EXPECTED='AGPL-3.0-or-later' ;; \
-	      *) \
-	        EXPECTED='AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial' ;; \
-	    esac; \
-	    if ! grep -Eq "SPDX-License-Identifier: $$EXPECTED([[:space:]]|\\*/)*$$" "$$f"; then \
-	        echo "  ✗ $$f (expected $$EXPECTED)"; \
-	        MISSING=$$((MISSING+1)); \
-	    fi; \
-	done; \
-	if [ $$MISSING -eq 0 ]; then \
-	    echo "  ✓ SDK and embedded codec SPDX scopes are consistent"; \
-	else \
-	    echo ""; \
-	    echo "  $$MISSING files need a SPDX license header. Aborting."; \
-	    exit 1; \
-	fi
+	$(Q)python3 packaging/check_licenses.py
 
 # ── Hardening audit ─────────────────────────────────────────────────
 # Inspect ELF properties of both source build and canonical prebuilt.
@@ -448,45 +445,22 @@ audit-all:
 .PHONY: clean
 clean:
 	$(Q)rm -rf $(BUILD_DIR)
-	$(Q)find . -name '*.o' -not -path './prebuilt/*' -delete
 
-# ── Distribution tarball ────────────────────────────────────────────
-# This archive contains the reproducible source-built base library. The frozen
-# full-ABI compatibility binary is intentionally not part of the archive.
-DIST_NAME = libvuptsdk-base-$(SDK_RELEASE)
-SOURCE_DATE_EPOCH = 1788652800
+# ── Zupt release packages ───────────────────────────────────────────
+# UUID and timestamp metadata varies; the packager verifies extracted content.
+.PHONY: dist dist-binary test-package test-proof
 
-.PHONY: dist
 dist:
-	$(Q)set -eu; \
-	  tmp=$$(mktemp -d "$${TMPDIR:-/tmp}/libvuptsdk-dist.XXXXXXXX"); \
-	  trap 'rm -rf -- "$$tmp"' EXIT HUP INT TERM; \
-	  root="$$tmp/$(DIST_NAME)"; \
-	  mkdir -p dist "$$root"; \
-	  mkdir -p "$$root/include" "$$root/tests"; \
-	  cp -r src doc packaging conformance-suite jasmin \
-	        Makefile zuptsdk.map \
-	        README.md README.pt-BR.md CHANGELOG.md SECURITY.md AUDIT.md BENCHMARKS.md \
-	        CT_VERIFICATION.md MLKEM_CONFORMANCE_FIX.md \
-	        LICENSE LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL NOTICE \
-	        "$$root/"; \
-	  cp tests/source_smoke.c tests/codec_integration_test.c "$$root/tests/"; \
-	  cp include/zuptsdk.h include/zupt.h include/zupt_acsl.h \
-	        include/zupt_cpuid.h include/zupt_jasmin.h include/zupt_keccak.h \
-	        include/zupt_mlkem.h include/zupt_x25519.h include/vaptvupt.h \
-	        include/vaptvupt_api.h include/vv_ans.h include/vv_bcj.h \
-	        include/vv_huffman.h include/vv_platform.h "$$root/include/"; \
-	  if [ -d .forgejo ]; then cp -r .forgejo "$$root/"; fi; \
-	  if [ -d .github ]; then cp -r .github "$$root/"; fi; \
-	  find "$$root" -name '__pycache__' -type d -exec rm -rf -- {} +; \
-	  find "$$root" -name target -type d -exec rm -rf -- {} +; \
-	  find "$$root" -type f \( -name '*.pyc' -o -name '*.o' \) -delete; \
-	  tar -C "$$tmp" --sort=name \
-	      --mtime="@$(SOURCE_DATE_EPOCH)" \
-	      --owner=0 --group=0 --numeric-owner \
-	      -czf "$(CURDIR)/dist/$(DIST_NAME).tar.gz" "$(DIST_NAME)"
-	@echo "Built: dist/$(DIST_NAME).tar.gz"
-	@cd dist && sha256sum $(DIST_NAME).tar.gz
+	$(Q)python3 packaging/build_zupt.py source --version $(SDK_RELEASE) --zupt "$(ZUPT)"
+
+dist-binary: base
+	$(Q)python3 packaging/build_zupt.py binary --version $(SDK_RELEASE) --zupt "$(ZUPT)"
+
+test-package:
+	$(Q)python3 tests/test_release_package.py
+
+test-proof:
+	$(Q)$(BEND) PROOF.bend
 
 # ── Help ────────────────────────────────────────────────────────────
 .PHONY: help
@@ -507,5 +481,8 @@ help:
 	@echo "  make test-asan   Build from-source with ASAN/UBSAN"
 	@echo "  make install     Install libvuptsdk-base + supported header/pkg-config"
 	@echo "  make uninstall   Remove installed files"
-	@echo "  make dist        Build the deterministic source archive"
+	@echo "  make dist        Build and verify an extreme-compression source .zupt"
 	@echo "  make clean       Remove build artifacts"
+	@echo "  make dist-binary Build and verify a Linux x86_64 .zupt"
+	@echo "  make test-package Test Zupt export and extraction"
+	@echo "  make test-proof  Check the Bend block aggregation laws"

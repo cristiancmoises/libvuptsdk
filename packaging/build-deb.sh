@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+# SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 Cristian Cezar Moisés
 # Build source-derived libvuptsdk-base Debian runtime and development packages.
 set -eu
@@ -48,7 +48,7 @@ fi
 ln -s "libvuptsdk-base.so.${VERSION}" "$RT_LIB/libvuptsdk-base.so.${SOVERSION}"
 install -m 0644 LICENSE "$RT_DOC/copyright"
 install -m 0644 README.md README.pt-BR.md CHANGELOG.md SECURITY.md NOTICE \
-    LICENSE-AGPL-3.0 LICENSE-GPL-3.0 LICENSE-COMMERCIAL "$RT_DOC/"
+    LICENSE-BSD-2-Clause LICENSE-BSD-3-Clause LICENSE-CC0-1.0 "$RT_DOC/"
 
 RT_SIZE=$(du -sk "$RT_ROOT" | cut -f1)
 cat > "$RT_ROOT/DEBIAN/control" <<EOF

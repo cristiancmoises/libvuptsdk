@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  * Copyright (c) 2026 Cristian Cezar Moisés
  *
  * libvuptsdk source-only smoke test
@@ -275,7 +275,7 @@ int main(void) {
             zuptsdk_archive_info_destroy(info);
         }
         if (rc == ZUPTSDK_OK && archive_size >= 4) {
-            size_t version_offset = archive_size - 4;
+            size_t version_offset = archive_size - 4 - (archive[7] >= 5 ? 32 : 0);
             uint8_t saved_version = archive[version_offset];
             zuptsdk_archive_info_t *info = NULL;
             archive[version_offset] = 2;

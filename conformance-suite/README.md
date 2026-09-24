@@ -27,9 +27,8 @@ encapsulationKeyCheck (§7.2) + 10 decapsulationKeyCheck (§7.3).
 
 ## Run locally (from a libvuptsdk checkout with this suite inside it)
 ```bash
-gcc -O2 -Iinclude -Isrc conformance-suite/kat_mlkem768_acvp.c \
-    src/zupt_mlkem.c src/zupt_keccak.c src/zupt_sha256.c -o katz
-cd conformance-suite && python3 run_kats.py ../katz     # expect 80/80
+sh conformance-suite/build_driver.sh conformance-suite/kat_mlkem768_acvp.c ./katz
+(cd conformance-suite && python3 run_kats.py ../katz)  # expect 80/80
 
 sh conformance-suite/build_kd.sh                        # builds ./kd
 python3 conformance-suite/differential_kyberpy.py ./kd  # expect 100/100 x2
@@ -45,3 +44,9 @@ Constant-time gate (requires valgrind + gcc):
 ```bash
 sh conformance-suite/ct/run_ct.sh    # dudect (failure at |t|>=10) + ctgrind
 ```
+
+All drivers use `build_driver.sh` to compile the production ML-KEM, Keccak,
+and comparison primitives. Each driver retains its own RNG override; ACVP
+seed injection is never linked with the production OS RNG. Set `CC=gcc` or
+`CC=clang` if your compiler is not available as `cc`. SHA-256 and its CPU
+dispatch are not dependencies of ML-KEM's SHA3/SHAKE computation.

@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * SPDX-License-Identifier: Apache-2.0 AND BSD-2-Clause
  *
  * VaptVupt — XXH64 checksum (simplified, standalone)
  * Based on xxHash by Yann Collet. Public domain.

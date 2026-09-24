@@ -1,7 +1,7 @@
 /*
  * XChaCha20-Poly1305 AEAD
  * Copyright (c) 2026 Cristian Cezar Moisés
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Implements:
  *   - ChaCha20 (RFC 8439)

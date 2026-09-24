@@ -1,0 +1,50 @@
+{
+  "scope": "Pure Bend model; generation + reduction + process startup + output, not C SDK performance",
+  "input": {
+    "depth": 20,
+    "leaves": 1048576,
+    "leaf_bytes": "(index % 256) + 1",
+    "expected_count": 1048576,
+    "expected_bytes": 134742016
+  },
+  "bend": "bend 2.0.5",
+  "clang": "clang version 22.1.8",
+  "platform": "Linux-7.2.7-x86_64-with-glibc2.41",
+  "processor": "",
+  "cpu_only": true,
+  "warmups_per_configuration": 1,
+  "repeats": 7,
+  "seconds": {
+    "1": {
+      "samples": [
+        0.021700496996345464,
+        0.021328217000700533,
+        0.020871265995083377,
+        0.02521273199818097,
+        0.020772785996086895,
+        0.02130682099959813,
+        0.020970031000615563
+      ],
+      "median": 0.02130682099959813
+    },
+    "24": {
+      "samples": [
+        0.006004515002132393,
+        0.0048894479987211525,
+        0.005527414999960456,
+        0.0063270609971368685,
+        0.006099246995290741,
+        0.006175394999445416,
+        0.006383640997228213
+      ],
+      "median": 0.006099246995290741
+    }
+  },
+  "one_thread_median_divided_by_24_thread_median": 3.4933527066618604,
+  "source_sha256": {
+    "formal/aggregation.bend": "1bb19d829fca084856d8ea7dd00e1bec15027a70a404864f03fefbc2d8316edc",
+    "formal/benchmark.bend": "934a01483cb66c10264d2e9b1a923c4b937d9d6afbf6b5a664570aac116a6843",
+    "LAWS.bend": "a2beb01b057b52dc5543ca97f99d1de6feaca828176fd945415d5888533d0eae",
+    "PROOF.bend": "61d44a90c5242a5701093e416ebdd6501850fade4335526fdfb6bd0c2aff113f"
+  }
+}

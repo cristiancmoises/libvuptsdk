@@ -1,0 +1,76 @@
+{
+  "scope": "Public base SDK compression and extraction, including temporary files; deterministic records, forced VaptVupt, one thread; local measurements, not a general speed guarantee.",
+  "compiler": "GCC 14.3.0 -O2, baseline x86_64 SSE2",
+  "before": {
+    "sdk": "2.0.4-base.1",
+    "system": "Linux-7.2.7-x86_64-with-glibc2.41",
+    "threads": 1,
+    "iterations": 5,
+    "results": [
+      {
+        "input_bytes": 65536,
+        "level": 1,
+        "archive_bytes": 10868,
+        "compress_ms": 0.26109399914275855,
+        "extract_ms": 0.0647389970254153
+      },
+      {
+        "input_bytes": 65536,
+        "level": 9,
+        "archive_bytes": 3778,
+        "compress_ms": 12.570199003675953,
+        "extract_ms": 0.11878499935846776
+      },
+      {
+        "input_bytes": 1048576,
+        "level": 1,
+        "archive_bytes": 87768,
+        "compress_ms": 1.3668770043295808,
+        "extract_ms": 0.4569180018734187
+      },
+      {
+        "input_bytes": 1048576,
+        "level": 9,
+        "archive_bytes": 7452,
+        "compress_ms": 28.757102001691237,
+        "extract_ms": 0.5728229953092523
+      }
+    ]
+  },
+  "after": {
+    "sdk": "2.1.0-base.1",
+    "system": "Linux-7.2.7-x86_64-with-glibc2.41",
+    "threads": 1,
+    "iterations": 5,
+    "results": [
+      {
+        "input_bytes": 65536,
+        "level": 1,
+        "archive_bytes": 10900,
+        "compress_ms": 0.27496699476614594,
+        "extract_ms": 0.07333400571951643
+      },
+      {
+        "input_bytes": 65536,
+        "level": 9,
+        "archive_bytes": 3820,
+        "compress_ms": 14.195898002071772,
+        "extract_ms": 0.1196550001623109
+      },
+      {
+        "input_bytes": 1048576,
+        "level": 1,
+        "archive_bytes": 87800,
+        "compress_ms": 1.5261619992088526,
+        "extract_ms": 0.5313069996191189
+      },
+      {
+        "input_bytes": 1048576,
+        "level": 9,
+        "archive_bytes": 3880,
+        "compress_ms": 20.912838997901417,
+        "extract_ms": 0.7447089956258424
+      }
+    ]
+  }
+}

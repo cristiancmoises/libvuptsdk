@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  * Differential helper: real-RNG keygen/encap/decap over hex on the CLI.
  * Used by the bidirectional differential runners (vs kyber-py / RustCrypto).
  * All I/O and argument counts are checked so a malformed invocation exits

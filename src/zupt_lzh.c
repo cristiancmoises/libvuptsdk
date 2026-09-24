@@ -1,7 +1,6 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
- * Copyright (c) 2026 Cristian Cezar Moisés
- *
+ * SPDX-License-Identifier: Apache-2.0
+ * Copyright (c) 2025-2026 Cristian Cezar Moisés
  * ZUPT - LZH Codec v4: High-Compression LZ77 + Canonical Huffman
  *
  * Key advances over v3:
@@ -217,15 +216,16 @@ static void huff_build(const uint32_t *freq, int ns, hcode_t *codes) {
 
     int ni=0;
     while(hn>1){
-        hnode_t a=hp[0];hp[0]=hp[--hn];if(hn>0)h_down(hp,hn,0);
+        hnode_t a=hp[0];hp[0]=hp[--hn];h_down(hp,hn,0);
         hnode_t b=hp[0];hp[0]=hp[--hn];if(hn>0)h_down(hp,hn,0);
         L[ni]=a.s; R[ni]=b.s;
         hnode_t in; in.f=a.f+b.f; in.s=-(ni+1); ni++;
         hp[hn]=in; h_up(hp,hn); hn++;
     }
 
-    uint8_t *dp=(uint8_t*)calloc(ns,1);
-    if(dp && hn==1) tree_depths(hp[0].s,0,L,R,dp,ns);
+    uint8_t *dp=(uint8_t*)calloc((size_t)ns, 1);
+    if (!dp) { free(hp); free(L); free(R); return; }
+    if(hn==1) tree_depths(hp[0].s,0,L,R,dp,ns);
 
     /* Enforce max code length using Kraft-sum based redistribution.
      *
@@ -320,14 +320,19 @@ static void huff_lut(const uint8_t *lengths, int ns, hlut_t *lut) {
     int sz = 1<<LZH_MAX_CODELEN;
     for(int i=0;i<sz;i++){lut[i].sym=-1;lut[i].len=0;}
 
+    /* SECURITY: code lengths index lc[]/nc[] (size LZH_MAX_CODELEN+1) and
+     * drive the shift 1<<(LZH_MAX_CODELEN-bits); a value > LZH_MAX_CODELEN
+     * would read/write out of bounds and shift by a negative amount (UB).
+     * Callers validate, but guard here too so the builder is memory-safe
+     * for any input (defense in depth). */
     int lc[LZH_MAX_CODELEN+1]; memset(lc,0,sizeof(lc));
-    for(int i=0;i<ns;i++) if(lengths[i]>0) lc[lengths[i]]++;
+    for(int i=0;i<ns;i++) if(lengths[i]>0 && lengths[i]<=LZH_MAX_CODELEN) lc[lengths[i]]++;
     uint32_t nc[LZH_MAX_CODELEN+1]; memset(nc,0,sizeof(nc));
     uint32_t cv=0;
     for(int b=1;b<=LZH_MAX_CODELEN;b++){cv=(cv+lc[b-1])<<1;nc[b]=cv;}
 
     for(int i=0;i<ns;i++){
-        if(lengths[i]==0) continue;
+        if(lengths[i]==0 || lengths[i]>LZH_MAX_CODELEN) continue;
         int bits=lengths[i];
         uint16_t c=(uint16_t)nc[bits]++;
         uint16_t rev=0;
@@ -371,7 +376,7 @@ static size_t cl_encode(const uint8_t *lens, int count, uint8_t *out, size_t oca
                     out[op++] = (uint8_t)(r - 11);
                     i += r; run -= r;
                 } else if (run >= 3) {
-                    int r = run > 10 ? 10 : run;
+                    int r = run;
                     if (op + 2 > ocap) return 0;
                     out[op++] = 17;
                     out[op++] = (uint8_t)(r - 3);
@@ -666,6 +671,8 @@ size_t zupt_lzh_compress(const uint8_t *src, size_t slen,
 
     /* Compress code lengths with RLE */
     uint8_t ll_lens[LZH_MAX_LITLEN], d_lens[LZH_MAX_DIST];
+    memset(ll_lens, 0, sizeof(ll_lens));
+    memset(d_lens, 0, sizeof(d_lens));
     for (int i = 0; i < ll_cnt; i++) ll_lens[i] = ll_codes[i].len;
     for (int i = 0; i < d_cnt; i++) d_lens[i] = d_codes[i].len;
 
@@ -737,7 +744,6 @@ size_t zupt_lzh_decompress(const uint8_t *src, size_t slen,
     int rle_on = (flags & 0x01);
     uint32_t rle_orig = 0;
     if (rle_on) {
-        if (ip + 4 > slen) return 0;
         memcpy(&rle_orig, src + ip, 4); ip += 4;
     }
 
@@ -762,9 +768,17 @@ size_t zupt_lzh_decompress(const uint8_t *src, size_t slen,
         if (used < 0) return 0;
         ip += cl_len;
     } else {
-        /* Raw code lengths */
-        if (ip + ll_hdr > slen) return 0;
+        /* Raw code lengths: one byte per symbol. SECURITY: bound the count
+         * against BOTH the source AND the destination stack buffer
+         * (ll_lens[LZH_MAX_LITLEN]). ll_hdr is attacker-controlled and may be
+         * up to 0x7FFF; without the destination bound a crafted archive
+         * smashes the stack. Also reject out-of-range code-length values
+         * (raw bytes are unconstrained; legal canonical lengths are 0..15)
+         * so the LUT builder cannot index past lc[]/nc[]. */
+        if (ll_hdr > LZH_MAX_LITLEN || ip + ll_hdr > slen) return 0;
         memcpy(ll_lens, src + ip, ll_hdr); ip += ll_hdr;
+        for (size_t k = 0; k < ll_hdr; k++)
+            if (ll_lens[k] > LZH_MAX_CODELEN) return 0;
     }
 
     /* Read dist code lengths */
@@ -777,8 +791,12 @@ size_t zupt_lzh_decompress(const uint8_t *src, size_t slen,
         if (used < 0) return 0;
         ip += cl_len;
     } else {
-        if (ip + d_hdr > slen) return 0;
+        /* Raw dist code lengths — same destination-bound + value-range
+         * hardening as the litlen path above (d_lens[LZH_MAX_DIST]). */
+        if (d_hdr > LZH_MAX_DIST || ip + d_hdr > slen) return 0;
         memcpy(d_lens, src + ip, d_hdr); ip += d_hdr;
+        for (size_t k = 0; k < d_hdr; k++)
+            if (d_lens[k] > LZH_MAX_CODELEN) return 0;
     }
 
     /* Build LUTs */

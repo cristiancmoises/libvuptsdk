@@ -1,5 +1,5 @@
 /*
- * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-libvuptsdk-Commercial
+ * SPDX-License-Identifier: Apache-2.0
  * dudect-style constant-time statistical test for zupt_mlkem768_decaps.
  *
  * Methodology (Reparaz, Balasch, Verbauwhede — "Dude, is my code constant

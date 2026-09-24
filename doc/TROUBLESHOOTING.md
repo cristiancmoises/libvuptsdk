@@ -1,238 +1,167 @@
-# libvuptsdk troubleshooting
+# libvuptsdk-base troubleshooting / Solução de problemas
 
-Common issues and how to diagnose them.
+Applies to / Aplica-se a **2.1.0-base.1**. See the
+[English API reference](API_REFERENCE.md) or the
+[referência em português](API_REFERENCE.pt-BR.md).
 
----
+## Build and runtime linking / Compilação e carregamento
 
-## Build / link errors
+If `make` cannot find `cc`, select the installed compiler explicitly:
+`make CC=gcc` or `make CC=clang`. Pass the same override to later test and
+install commands and use that compiler for the examples below.
 
-### `error while loading shared libraries: libvuptsdk.so.2`
+Se `make` não encontrar `cc`, selecione o compilador instalado explicitamente:
+`make CC=gcc` ou `make CC=clang`. Repita a opção nos comandos de teste e
+instalação e use esse compilador nos exemplos abaixo.
 
-The runtime linker can't find the library. Choose one:
+Use the base pkg-config module for both headers and libraries:
 
-```bash
-# Permanent (system-wide, requires root):
+Use o módulo pkg-config da base para headers e bibliotecas:
+
+```sh
+cc app.c $(pkg-config --cflags --libs vuptsdk-base) -o app
+```
+
+For a custom installation prefix, point pkg-config to its metadata. On Linux,
+`ldconfig` updates the system loader cache after a system installation; for an
+isolated test, set the runtime library path for that invocation:
+
+Para um prefixo personalizado, indique os metadados ao pkg-config. No Linux,
+`ldconfig` atualiza o cache do carregador após a instalação no sistema; para
+um teste isolado, configure o caminho da biblioteca nessa execução:
+
+```sh
+PKG_CONFIG_PATH=/opt/libvuptsdk/lib/pkgconfig pkg-config --cflags --libs vuptsdk-base
 sudo ldconfig
-
-# Permanent (user, no root):
-echo "/path/to/libvuptsdk/lib" >> ~/.ld-library-path
-
-# Per-invocation:
-LD_LIBRARY_PATH=/path/to/libvuptsdk/lib ./your_app
-
-# Build-time bake-in (recommended for portable apps):
-cc app.c -lvuptsdk -Wl,-rpath,/path/to/libvuptsdk/lib
+LD_LIBRARY_PATH=/opt/libvuptsdk/lib ./app
 ```
 
-### `cannot find -lvuptsdk`
+If you ran `make test-asan`, rebuild normally before installing:
 
-The linker can't find the library at link time. Use `pkg-config`:
+Se executou `make test-asan`, recompile normalmente antes de instalar:
 
-```bash
-cc app.c $(pkg-config --cflags --libs vuptsdk) -o app
-```
-
-If pkg-config can't find it either, set `PKG_CONFIG_PATH`:
-
-```bash
-PKG_CONFIG_PATH=/opt/zupt/lib/pkgconfig pkg-config --cflags --libs vuptsdk
-```
-
-### `undefined reference to zuptsdk_easy_encrypt`
-
-You're linking against the source-only build (`libvuptsdk-base.so.2`)
-which lacks the `easy_*` layer. The `easy_*` functions live in the
-canonical prebuilt only. Link against `libvuptsdk.so.2` (no `-base`):
-
-```bash
-# Wrong (source build, missing easy_*):
-cc app.c -lvuptsdk-base
-# Right (canonical, has full ABI):
-cc app.c -lvuptsdk
-```
-
-`make install` always installs the canonical, so this is only an issue
-if you're using the in-tree build artifacts directly.
-
-### `fatal error: zuptsdk.h: No such file or directory`
-
-The compiler can't find the headers. Use pkg-config:
-
-```bash
-cc -I$(pkg-config --variable=includedir vuptsdk) app.c ...
-# or simpler:
-cc $(pkg-config --cflags vuptsdk) app.c ...
-```
-
-### Python: `RuntimeError: libvuptsdk shared library not found`
-
-The Python bindings tried `libvuptsdk.so.2`, `libvuptsdk.so`, and
-`ctypes.util.find_library('vuptsdk')` and none worked. Set:
-
-```bash
-export ZUPTSDK_LIBRARY=/path/to/libvuptsdk.so.2
-```
-
-Or call `make install` to put it in `/usr/local/lib`, then `sudo ldconfig`.
-
-### Node.js: `Error: koffi.load() failed`
-
-Same as the Python case — set `ZUPTSDK_LIBRARY` env var.
-
----
-
-## Runtime errors
-
-### `decrypt: authentication failed (-10)`
-
-The MAC verification step failed. Three possible causes:
-
-1. **The blob has been tampered with**, even by a single bit.
-2. **You're using the wrong private key**. Cross-check by comparing the
-   pubkey fingerprint of the privkey to the pubkey used by the sender.
-3. **The blob was encrypted with a different version of libvuptsdk**
-   (rare — the format includes a version byte that gets checked first).
-
-### `decrypt: format error (-11)`
-
-The input is not a valid libvuptsdk blob. It may be:
-- An empty file
-- Truncated mid-transfer
-- Compressed / wrapped in some other format
-- A regular text file (libvuptsdk blobs are binary)
-
-Check the first 8 bytes — they should start with the libvuptsdk magic
-header.
-
-### Decryption is slow
-
-If your message is small (≤ 1 KB), most of the time is the public-key
-KEM operation (~430 μs constant overhead). This is fundamental to PQ
-hybrid cryptography. If you need higher throughput for many small
-messages:
-
-- Reuse the recipient's loaded `zuptsdk_privkey_t` across calls (use the
-  lifecycle API, not `easy_*`) — saves the file-read on each call.
-- For internal services where you control both sides, switch to field
-  encryption (`encrypt_field`) with a shared symmetric key — drops the
-  per-call cost from 430 μs to 5 μs.
-
-If your message is large (≥ 1 MB), the throughput should be ~150-200 MB/s
-on a modern 2-core. If you're seeing less:
-
-- Check `cat /proc/cpuinfo` for AES-NI (`aes` flag). Without AES-NI, the
-  AEAD path falls back to bitsliced AES, which is ~5× slower.
-- Check that you're not unintentionally building with `-O0` (debug). The
-  release build uses `-O2`.
-
-### `mlock` warnings on resource-constrained systems
-
-```
-mlock: Cannot allocate memory
-```
-
-The library tries to `mlock()` private-key buffers to keep them out of
-swap. On systems with low `RLIMIT_MEMLOCK` (typical default: 64 KB), this
-warning is harmless — the library falls back to non-locked memory. To
-silence it:
-
-```bash
-ulimit -l 65536      # raise to 64 MiB
-# or systemd: LimitMEMLOCK=infinity in service unit
-```
-
-The library will continue to function correctly with degraded protection.
-
-### `Argon2id is too slow on my server`
-
-Default Argon2id parameters (m=64MB, t=3, p=1) take ~1 second on a 2-CPU
-sandbox. For high-throughput web servers, you may want to lower this.
-Use the lifecycle API to set custom params:
-
-```c
-zuptsdk_password_params_t *params;
-zuptsdk_password_params_create(&params);
-zuptsdk_password_params_set_custom(params, /*memory_kb=*/16384, /*t=*/2, /*p=*/2);
-/* … pass params to a custom encrypt … */
-zuptsdk_password_params_destroy(params);
-```
-
-Trade-off: lower parameters make brute-force easier. Don't go below
-m=8MB, t=2 for password storage.
-
----
-
-## Cross-compilation
-
-### Building for AArch64 from x86_64
-
-```bash
-sudo apt install gcc-aarch64-linux-gnu
+```sh
 make clean
-make CC=aarch64-linux-gnu-gcc
+make -j4
 ```
 
-The Makefile auto-detects target arch via `$(CC) -dumpmachine` and
-selects NEON SIMD instead of x86 SSE/AVX2.
+## Missing `easy_*` symbols / Símbolos `easy_*` ausentes
 
-### Building for Termux (Android AArch64)
+The base library does not implement the historical full-ABI convenience layer.
+`make install` installs **the base library**. Adapt new applications to
+`zuptsdk.h` and its archive functions. The existing bindings and
+`prebuilt/libvuptsdk.so.2.0.3` belong to the frozen compatibility surface;
+renaming or symlinking that binary does not upgrade it.
 
-```bash
-pkg install clang make
-make CC=aarch64-linux-android-clang
+A biblioteca base não implementa a camada de conveniência da ABI completa
+histórica. `make install` instala **a biblioteca base**. Adapte novas aplicações
+às funções de arquivo de `zuptsdk.h`. Os bindings existentes e
+`prebuilt/libvuptsdk.so.2.0.3` pertencem à compatibilidade congelada; renomear
+esse binário ou criar um link simbólico não o atualiza.
+
+## Archive failures / Falhas de arquivo
+
+Use `zuptsdk_strerror(rc)` and `zuptsdk_last_error_detail()` after a failed call.
+The same numeric code can mean something different in a legacy binding;
+interpret it using the header for the library actually loaded.
+
+Use `zuptsdk_strerror(rc)` e `zuptsdk_last_error_detail()` depois de uma falha.
+Um código numérico pode ter outro significado em um binding antigo;
+interprete-o com o header da biblioteca realmente carregada.
+
+| Base error | English | Português |
+|---|---|---|
+| `ZUPTSDK_ERR_TOO_LARGE` | Output exceeds the context ceiling; review the request budget | Saída excede o teto do contexto; revise o orçamento da requisição |
+| `ZUPTSDK_ERR_BAD_ARCHIVE` | Invalid, truncated or incompatible archive | Arquivo inválido, truncado ou incompatível |
+| `ZUPTSDK_ERR_BAD_PASSWORD` / `BAD_MAC` | Wrong credentials, modified input or incompatible historical encryption | Credenciais incorretas, entrada alterada ou criptografia histórica incompatível |
+| `ZUPTSDK_ERR_PATH_TRAVERSAL` | An entry has an unsafe extraction path | Uma entrada tem caminho de extração inseguro |
+| `ZUPTSDK_ERR_IO` | Check permissions, free space and temporary storage | Confira permissões, espaço livre e armazenamento temporário |
+
+Trusted older archives may lack AIT. Follow the explicit migration option in
+the API reference; keep it disabled for untrusted requests. Format 1.6 output
+needs an updated reader. A failed authentication check alone does not identify
+which of the possible causes occurred.
+
+Arquivos antigos confiáveis podem não ter AIT. Siga a opção explícita de
+migração na referência da API; mantenha-a desativada para requisições não
+confiáveis. O formato 1.6 exige um leitor atualizado. Uma falha de autenticação
+isolada não identifica qual das causas possíveis ocorreu.
+
+Extraction refuses to overwrite existing destinations, including regular
+files, symlinks and FIFOs. Use a fresh directory when retrying; if an archive
+fails after earlier entries succeeded, discard that request's output directory.
+
+A extração recusa sobrescrever destinos existentes, inclusive arquivos comuns,
+links simbólicos e FIFOs. Use um diretório novo ao tentar novamente; se um
+arquivo falhar depois de extrair entradas anteriores, descarte o diretório de
+saída daquela requisição.
+
+## Memory and resource use / Memória e recursos
+
+Free returned buffers with `zuptsdk_free()`, and pair each opaque object's
+creation with its matching destroy function. Do not substitute the C library's
+`free()` when SDK allocators may differ. The output ceiling does not limit
+input buffers or temporary disk use. Memory locking is best-effort and may be
+refused by OS resource limits.
+
+Libere buffers retornados com `zuptsdk_free()` e use a função de destruição
+correspondente a cada objeto opaco criado. Não substitua pela `free()` da
+biblioteca C quando os alocadores do SDK puderem ser diferentes. O teto de
+saída não limita buffers de entrada nem disco temporário. O bloqueio de
+memória é uma tentativa e pode ser recusado por limites do sistema.
+
+## Downloads / Downloads
+
+Verify the GPG signature and checksums before extracting. With the Zupt CLI,
+options come before the archive: `zupt extract -o destination archive.zupt`.
+See the READMEs for exact filenames, fingerprint and source/binary instructions.
+New packages use `.zupt` starting with 2.1.0-base.1; old release formats remain
+unchanged.
+
+Verifique a assinatura GPG e os checksums antes da extração. Na CLI Zupt, as
+opções vêm antes do arquivo: `zupt extract -o destino arquivo.zupt`. Os READMEs
+contêm nomes exatos, impressão digital e instruções para fonte e binário. Os
+novos pacotes usam `.zupt` a partir da versão 2.1.0-base.1; os formatos dos
+lançamentos antigos continuam os mesmos.
+
+### Zupt 5.2.9 output-directory permissions / Permissões do diretório de saída
+
+The standalone Zupt 5.2.9 CLI can fail when an output path has an ancestor that
+allows traversal but not directory listing. The SDK fixes that path handling;
+the separately installed CLI needs its own update. Until then, extract to a
+private directory under an accessible path, then move the extracted package:
+
+A CLI independente Zupt 5.2.9 pode falhar quando um ancestral do caminho de
+saída permite travessia, mas não listagem. O SDK corrige esse tratamento; a CLI
+instalada separadamente precisa de sua própria atualização. Enquanto isso,
+extraia em um diretório privado sob um caminho acessível e depois mova o pacote:
+
+```sh
+extract_stage=$(mktemp -d /tmp/libvuptsdk-extract.XXXXXX)
+zupt extract -o "$extract_stage" "$PWD/libvuptsdk-base-2.1.0-base.1-src.zupt"
+mv "$extract_stage/libvuptsdk-base-2.1.0-base.1" ./
+rmdir "$extract_stage"
 ```
 
-Note: the canonical prebuilt is x86_64 only. On Termux, you must use the
-source build (which lacks `easy_*`). Track the open item in AUDIT.md.
+Use a destination where that package directory does not already exist. Apply
+the same staging approach to the binary bundle using its filename and root.
 
----
+Use um destino onde o diretório desse pacote ainda não exista. Aplique o mesmo
+procedimento ao pacote binário, usando o nome e o diretório raiz correspondentes.
 
-## Memory leaks
+## Reporting bugs / Relatar problemas
 
-If ASAN/Valgrind reports leaks from libvuptsdk, the most common cause is
-forgetting to free output buffers from the `easy_*` API:
+Include the output of `zuptsdk_version_string()`, operating system, compiler,
+loaded library path and a minimal reproducer without secrets. For memory
+errors, include `make test-asan` output when available.
 
-```c
-/* Wrong: leaks blob */
-uint8_t *blob = NULL; size_t sz = 0;
-zuptsdk_easy_encrypt(pub, msg, len, &blob, &sz);
-write(fd, blob, sz);
-/* missing: free(blob) */
+Inclua a saída de `zuptsdk_version_string()`, sistema operacional, compilador,
+caminho da biblioteca carregada e um exemplo mínimo sem segredos. Para erros
+de memória, inclua a saída de `make test-asan` quando disponível.
 
-/* Right */
-uint8_t *blob = NULL; size_t sz = 0;
-zuptsdk_easy_encrypt(pub, msg, len, &blob, &sz);
-write(fd, blob, sz);
-free(blob);                /* or zuptsdk_free(blob) — equivalent */
-```
+Public issues / Problemas públicos:
+[libvuptsdk issues](https://git.securityops.co/cristiancmoises/libvuptsdk/issues).
+Security reports / Relatos de segurança: **zupt@riseup.net**, privately / em
+particular.
 
-For lifecycle objects, every `*_create` needs a `*_destroy`:
-
-| Created by | Destroyed by |
-|---|---|
-| `zuptsdk_ctx_create` | `zuptsdk_ctx_destroy` |
-| `zuptsdk_keypair_generate` | `zuptsdk_keypair_destroy` |
-| `zuptsdk_secure_buf_create` | `zuptsdk_secure_buf_destroy` |
-| `zuptsdk_stream_pq_init_*` | `zuptsdk_stream_state_destroy` |
-
----
-
-## Reporting bugs
-
-If you've ruled out the above and believe you've found a real bug:
-
-1. **Reduce to a minimal test case** — ideally < 50 lines.
-2. **Include the output of `zuptsdk_version_string()`**.
-3. **Include your platform**: `uname -a`, `gcc --version`, `glibc`/`musl` version.
-4. **Run with ASAN** if the bug involves crashes or memory:
-   ```bash
-   make test-asan
-   ```
-5. **For security issues**: email `zupt@riseup.net` directly. Do not file
-   public issues.
-
-For non-security bugs: <https://git.securityops.co/cristiancmoises/libvuptsdk/issues>
-
----
-
-**License**: This document is part of the libvuptsdk project, licensed under the GNU Affero General Public License version 3 or later (AGPL-3.0-or-later). See [LICENSE](../LICENSE).
+Copyright 2026 Cristian Cezar Moisés. [Apache-2.0](../LICENSE).
