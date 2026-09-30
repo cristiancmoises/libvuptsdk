@@ -3,7 +3,7 @@
 [English](API_REFERENCE.md)
 
 Esta referência vale para o pré-lançamento compilável
-`2.1.0-base.1` e para o header instalado
+`2.1.0-base.2` e para o header instalado
 `libvuptsdk-base/zuptsdk.h`. O header é a fonte autoritativa para assinaturas e
 regras de posse de memória.
 
@@ -176,7 +176,7 @@ Consulte [SECURITY.md](../SECURITY.md) para os limites criptográficos.
 
 ## Compatibilidade de arquivos
 
-A versão 2.1.0-base.1 grava o formato Zupt 1.6, com trailer de integridade do
+A versão 2.1.0-base.2 grava o formato Zupt 1.6, com trailer de integridade do
 arquivo (AIT) depois do rodapé e preâmbulos de bloco autenticados nos arquivos
 criptografados. Use um leitor atualizado para novos arquivos; o binário
 congelado 2.0.3 não é um leitor substituto compatível.

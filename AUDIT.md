@@ -1,5 +1,33 @@
 # libvuptsdk release verification
 
+## 2.1.0-base.2 candidate checks — 2026-09-30
+
+The current candidate integrates Zupt 5.2.10 and VaptVupt 2.65.13 while
+preserving the SDK adaptations recorded in UPSTREAM.json. Fresh local checks
+passed the 12 source smoke cases, 57 codec integration cases, 74 engine cases,
+the public example, three release-package cases, and the license inventory.
+The separately built Zupt 5.2.10 CLI passed all 10 archive interoperability
+directions. `bend PROOF.bend` checked the existing 10 model laws; these laws
+do not prove the C implementation or operating system.
+
+Fresh `make test-asan` passed the source, codec and engine checks under
+ASan/UBSan. The canonical allocator-limit harness compiled against the SDK
+codec passed all 432 cases, including NULL empty inputs. The 60 exported
+name/type/version entries match the previous base.1 library. All 42 upstream
+reference hashes and both immutable source commits are recorded and checked.
+
+Unsigned runtime/development DEBs and RPMs, plus an SRPM, were built from the
+current source. Guix-generated library RUNPATH was removed explicitly with
+patchelf; the RPM build also used scoped standard `/usr` and make-path macros
+without changing installed system macros. Both extracted development
+examples linked and round-tripped byte-exact, with no RPATH/RUNPATH in the
+packaged libraries. This is payload validation on glibc 2.41, not a
+Debian/Ubuntu/Fedora installation test. Signed artifact checks and exact
+tagged-tree source-package verification remain release-publication gates.
+Docker could not start its configured runc runtime, and Podman rejected its
+image under the host policy; neither attempt establishes a distro install
+test. Earlier results below are historical and are not transferred to base.2.
+
 Release: **2.1.0-base.1**. Updated: **2026-09-24**.
 
 This report applies to the source-built base API integrating Zupt 5.2.9 and
@@ -7,7 +35,7 @@ VaptVupt codec 2.65.11. The frozen full-ABI `libvuptsdk.so.2.0.3` is excluded
 from new packages and does not inherit the results of source-build checks.
 Internal verification is not an independent external cryptographic audit.
 
-## Current release evidence
+## Historical 2.1.0-base.1 release evidence
 
 The source and engine checks below were rerun after the import. Final artifact
 delivery and signature verification are recorded with the release; follow the

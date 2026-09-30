@@ -7,6 +7,22 @@ at the ABI level (see the release boundary in README.md).
 
 ---
 
+## [2.1.0-base.2] — 2026-09-30
+
+- Update the source-built base library to the Zupt 5.2.10 consumer baseline
+  and VaptVupt 2.65.13 (`3b3b8f494b4bdd3b74aab60388eef1694ef316f8` and
+  `e30dc9329be7cf9f233b1ac0b1fc9ed31f530391`). Preserve the local public ABI, atomic
+  output, execute-only ancestor support, size limits, and secure wipes.
+- Integrate reachable-bucket preparation for small BALANCED/EXTREME inputs
+  and their first-block prepass, bound NULL empty input setup, and size the
+  hash3 chain to actual history.
+  The SDK's first-party Apache-2.0 notices and third-party terms remain.
+- Update version, provenance, EN/PT-BR documentation and package metadata
+  to base.2. New source and Linux packages use verified `.zupt` archives;
+  DEB/RPM outputs require their own build and validation before publication.
+- Keep the frozen full-ABI 2.0.3 binary unchanged and outside new release
+  artifacts. Earlier releases and their signatures remain historical.
+
 ## [2.1.0-base.1] — 2026-09-24
 
 This prerelease updates the source-built `libvuptsdk-base` API. The frozen

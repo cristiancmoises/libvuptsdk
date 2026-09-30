@@ -2,7 +2,7 @@
 
 [Português do Brasil](API_REFERENCE.pt-BR.md)
 
-This reference applies to the source-built `2.1.0-base.1` prerelease and the
+This reference applies to the source-built `2.1.0-base.2` prerelease and the
 installed header `libvuptsdk-base/zuptsdk.h`. The header is authoritative for
 signatures and ownership annotations.
 
@@ -201,7 +201,7 @@ operations, Windows and macOS runtime behavior are not claimed by that gate.
 
 ## Archive compatibility
 
-Version 2.1.0-base.1 writes Zupt format 1.6, with an archive integrity trailer
+Version 2.1.0-base.2 writes Zupt format 1.6, with an archive integrity trailer
 (AIT) after the footer and authenticated block prefaces in encrypted archives.
 Use an updated reader for new archives; the frozen 2.0.3 binary is not a
 compatible replacement reader.

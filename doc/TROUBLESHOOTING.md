@@ -1,6 +1,6 @@
 # libvuptsdk-base troubleshooting / Solução de problemas
 
-Applies to / Aplica-se a **2.1.0-base.1**. See the
+Applies to / Aplica-se a **2.1.0-base.2**. See the
 [English API reference](API_REFERENCE.md) or the
 [referência em português](API_REFERENCE.pt-BR.md).
 
@@ -138,8 +138,8 @@ extraia em um diretório privado sob um caminho acessível e depois mova o pacot
 
 ```sh
 extract_stage=$(mktemp -d /tmp/libvuptsdk-extract.XXXXXX)
-zupt extract -o "$extract_stage" "$PWD/libvuptsdk-base-2.1.0-base.1-src.zupt"
-mv "$extract_stage/libvuptsdk-base-2.1.0-base.1" ./
+zupt extract -o "$extract_stage" "$PWD/libvuptsdk-base-2.1.0-base.2-src.zupt"
+mv "$extract_stage/libvuptsdk-base-2.1.0-base.2" ./
 rmdir "$extract_stage"
 ```
 

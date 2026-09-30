@@ -5,8 +5,8 @@
 
 **A C SDK for creating, verifying and extracting Zupt archives.**
 
-The source release **2.1.0-base.1** integrates the **Zupt 5.2.9** archive
-engine and **VaptVupt codec 2.65.11**. It provides shared and static libraries,
+The source release **2.1.0-base.2** integrates the **Zupt 5.2.10** archive
+engine and **VaptVupt codec 2.65.13**. It provides shared and static libraries,
 an opaque C API and a `vuptsdk-base` pkg-config module. Zupt, the VaptVupt
 application, the standalone codec and this SDK remain separate projects.
 
@@ -17,7 +17,7 @@ Copyright 2026 Cristian Cezar Moisés. First-party source is licensed under
 
 | Artifact | Version | Scope |
 |---|---|---|
-| `libvuptsdk-base.so.2` / `libvuptsdk-base.a` | 2.1.0-base.1 | Current source archive API; ABI versions `ZUPTSDK_1.0`, `1.1`, `1.2` |
+| `libvuptsdk-base.so.2` / `libvuptsdk-base.a` | 2.1.0-base.2 | Current source archive API; ABI versions `ZUPTSDK_1.0`, `1.1`, `1.2` |
 | `prebuilt/libvuptsdk.so.2.0.3` | Frozen 2.0.3 | Historical full ABI; excluded from installation and release packages |
 
 The base release is a prerelease. The frozen binary has additional `easy_*`,
@@ -50,7 +50,7 @@ for another location. The public header is installed under
 `include/libvuptsdk-base/`, separate from the legacy SDK.
 
 ```sh
-pkg-config --modversion vuptsdk-base   # 2.1.0-base.1
+pkg-config --modversion vuptsdk-base   # 2.1.0-base.2
 cc doc/example.c $(pkg-config --cflags --libs vuptsdk-base) -o example
 ./example
 ```
@@ -81,8 +81,8 @@ Releases are published on the four [repository hosts](#repositories-and-provenan
 New packages use `.zupt` starting with 2.1.0-base.1; earlier releases and
 packages retain their original names and formats. The main downloads are:
 
-- `libvuptsdk-base-2.1.0-base.1-src.zupt`: source, tests and product documentation.
-- `libvuptsdk-base-2.1.0-base.1-linux-x86_64.zupt`: Linux x86-64 library, header and installation script.
+- `libvuptsdk-base-2.1.0-base.2-src.zupt`: source, tests and product documentation.
+- `libvuptsdk-base-2.1.0-base.2-linux-x86_64.zupt`: Linux x86-64 library, header and installation script.
 - `SHA256SUMS`, `SHA256SUMS.asc` and `release-key.asc`: checksums, detached signature and public signing key.
 
 Check the public key fingerprint against a trusted copy before importing it:
@@ -98,27 +98,27 @@ gpg --verify SHA256SUMS.asc SHA256SUMS
 sha256sum --ignore-missing --check SHA256SUMS
 ```
 
-Confirm that each downloaded archive reports `OK`. Then use Zupt 5.2.9 or a
+Confirm that each downloaded archive reports `OK`. Then use Zupt 5.2.10 or a
 compatible newer reader. Use a fresh destination; extraction refuses to replace
 existing files. Extraction options must precede the archive name:
 
 ```sh
-zupt test libvuptsdk-base-2.1.0-base.1-src.zupt
-zupt extract -o ./source libvuptsdk-base-2.1.0-base.1-src.zupt
-cd source/libvuptsdk-base-2.1.0-base.1
+zupt test libvuptsdk-base-2.1.0-base.2-src.zupt
+zupt extract -o ./source libvuptsdk-base-2.1.0-base.2-src.zupt
+cd source/libvuptsdk-base-2.1.0-base.2
 make -j4
 make test
 ```
 
-If Zupt 5.2.9 reports output-path permission errors, use the
+If Zupt 5.2.10 reports output-path permission errors, use the
 [temporary-directory workaround](doc/TROUBLESHOOTING.md#zupt-529-output-directory-permissions--permissões-do-diretório-de-saída).
 
 For the binary bundle, verify its checksum as above, then:
 
 ```sh
-zupt test libvuptsdk-base-2.1.0-base.1-linux-x86_64.zupt
-zupt extract -o ./binary libvuptsdk-base-2.1.0-base.1-linux-x86_64.zupt
-cd binary/libvuptsdk-base-2.1.0-base.1-linux-x86_64
+zupt test libvuptsdk-base-2.1.0-base.2-linux-x86_64.zupt
+zupt extract -o ./binary libvuptsdk-base-2.1.0-base.2-linux-x86_64.zupt
+cd binary/libvuptsdk-base-2.1.0-base.2-linux-x86_64
 sudo sh install.sh
 ```
 
@@ -176,8 +176,8 @@ report vulnerabilities privately to **zupt@riseup.net**.
 
 Imported revisions:
 
-- Zupt **5.2.9**: `63f27dd0c5afcf155f813a069c29f6384d46790c`.
-- VaptVupt codec **2.65.11**: `1cc78bce90619dbf97e0ed1ad449c3c4f6329041`.
+- Zupt **5.2.10**: `3b3b8f494b4bdd3b74aab60388eef1694ef316f8`.
+- VaptVupt codec **2.65.13**: `e30dc9329be7cf9f233b1ac0b1fc9ed31f530391`.
 
 The SDK retains adaptations for its public ABI and build. [NOTICE](NOTICE)
 records provenance and third-party obligations; the frozen binary retains its

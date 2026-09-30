@@ -12,12 +12,12 @@ LICENSE-COMMERCIAL are retained as historical references, not current SDK terms.
 
 Upstream provenance
 -------------------
-VaptVupt codec 2.65.11:
+VaptVupt codec 2.65.13:
   https://git.securityops.co/cristiancmoises/vaptvupt-codec
-  1cc78bce90619dbf97e0ed1ad449c3c4f6329041
-Zupt 5.2.9:
+  e30dc9329be7cf9f233b1ac0b1fc9ed31f530391
+Zupt 5.2.10:
   https://git.securityops.co/cristiancmoises/zupt
-  63f27dd0c5afcf155f813a069c29f6384d46790c
+  3b3b8f494b4bdd3b74aab60388eef1694ef316f8
 UPSTREAM.json records source hashes and the local integration policy. Imported
 files have been modified for SDK integration and this licensing grant.
 

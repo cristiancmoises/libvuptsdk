@@ -11,7 +11,7 @@ RELEASE=$(make -s printrelease)
 SOVERSION=${SOVERSION:-2}
 ARCH=${ARCH:-$(dpkg --print-architecture)}
 MULTIARCH=${MULTIARCH:-$(dpkg-architecture -qDEB_HOST_MULTIARCH)}
-DEB_VERSION=${DEB_VERSION:-${VERSION}~base1-1}
+DEB_VERSION=${DEB_VERSION:-${VERSION}~base2-1}
 OUT_DIR=${OUT_DIR:-$(pwd)/dist/packages}
 SOURCE_LIB=build/libvuptsdk-base.so.${VERSION}
 SOURCE_STATIC=build/libvuptsdk-base.a
@@ -64,7 +64,7 @@ Installed-Size: $RT_SIZE
 Homepage: https://git.securityops.co/cristiancmoises/libvuptsdk
 Description: source-built VaptVupt archive SDK runtime
  libvuptsdk-base provides the reproducible archive API backed by the
- VaptVupt 2.65.11 codec. It is intentionally separate from the frozen
+ VaptVupt 2.65.13 codec. It is intentionally separate from the frozen
  full-ABI libvuptsdk 2.0.3 compatibility binary.
 EOF
 cat > "$RT_ROOT/DEBIAN/triggers" <<'EOF'

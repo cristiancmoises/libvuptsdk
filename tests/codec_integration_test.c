@@ -394,9 +394,9 @@ out:
 int main(void)
 {
     check(VV_VERSION_MAJOR == 2 && VV_VERSION_MINOR == 65 &&
-              VV_VERSION_PATCH == 11 &&
-              strcmp(VV_VERSION_STRING, "2.65.11") == 0,
-          "embedded codec reports version 2.65.11");
+              VV_VERSION_PATCH == 13 &&
+              strcmp(VV_VERSION_STRING, "2.65.13") == 0,
+          "embedded codec reports version 2.65.13");
     check(vvz_compress_bound(0) >= sizeof(vv_frame_header_t),
           "zero-length input has a usable bound");
 

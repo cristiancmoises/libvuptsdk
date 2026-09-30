@@ -1,5 +1,8 @@
 # libvuptsdk performance measurements
 
+The measurements below belong to 2.1.0-base.1. They were not rerun for
+2.1.0-base.2 and do not establish the new release's throughput.
+
 Release: **2.1.0-base.1**. Updated: **2026-09-24**.
 
 The source API and a separate Bend model were measured on an **Intel Core

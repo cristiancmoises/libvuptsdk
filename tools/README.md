@@ -2,7 +2,7 @@
 
 These programs target the historical full-ABI `easy_*` interface. Their earlier
 results are not verification of the current source-built base API. See
-[AUDIT.md](../AUDIT.md) for the 2.1.0-base.1 release gate. `make install` installs
+[AUDIT.md](../AUDIT.md) for the 2.1.0-base.2 release gate. `make install` installs
 the base library and does not provide the legacy interface these tools need.
 
 The tools are small and self-contained; no test framework is needed.

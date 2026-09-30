@@ -85,7 +85,7 @@ extern "C" {
 #define ZUPTSDK_VERSION_MAJOR 2
 #define ZUPTSDK_VERSION_MINOR 1
 #define ZUPTSDK_VERSION_PATCH 0
-#define ZUPTSDK_VERSION_STRING "2.1.0-base.1"
+#define ZUPTSDK_VERSION_STRING "2.1.0-base.2"
 
 /* Compile-time version check helper (negative if header older than required) */
 #define ZUPTSDK_VERSION_AT_LEAST(maj, min, pat) \
@@ -96,7 +96,7 @@ extern "C" {
 
 /**
  * Return the runtime version string of the linked library, e.g.
- * "2.1.0-base.1".
+ * "2.1.0-base.2".
  * The returned pointer is to static storage and must NOT be freed.
  *
  * Use this with the compile-time ZUPTSDK_VERSION_STRING to detect mismatch

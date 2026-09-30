@@ -14,7 +14,7 @@ fi
 VERSION=$(make -s printversion)
 RELEASE=$(make -s printrelease)
 SOVERSION=${SOVERSION:-2}
-RPM_RELEASE=${RPM_RELEASE:-0.1.base1}
+RPM_RELEASE=${RPM_RELEASE:-0.2.base2}
 RPMBUILD_FLAGS=${RPMBUILD_FLAGS:-}
 OUT_DIR=${OUT_DIR:-$(pwd)/dist/packages}
 DIST_NAME=libvuptsdk-base-${RELEASE}
@@ -45,11 +45,11 @@ Source0:        ${DIST_NAME}-src.zupt
 BuildRequires:  gcc
 BuildRequires:  make
 BuildRequires:  python3
-BuildRequires:  zupt >= 5.2.9
+BuildRequires:  zupt >= 5.2.10
 
 %description
 libvuptsdk-base provides a reproducible archive API backed by the VaptVupt
-2.65.11 codec. It is intentionally separate from the frozen full-ABI
+2.65.13 codec. It is intentionally separate from the frozen full-ABI
 libvuptsdk 2.0.3 compatibility binary.
 
 %package devel
@@ -89,8 +89,8 @@ rm -rf -- $DIST_NAME
 %doc doc/API_REFERENCE.md doc/API_REFERENCE.pt-BR.md doc/example.c
 
 %changelog
-* Thu Sep 24 2026 Cristian Cezar Moisés <zupt@riseup.net> - $VERSION-$RPM_RELEASE
-- Publish the source-built base SDK with VaptVupt 2.65.11
+* Wed Sep 30 2026 Cristian Cezar Moisés <zupt@riseup.net> - $VERSION-$RPM_RELEASE
+- Publish the source-built base SDK with VaptVupt 2.65.13
 EOF
 
 # RPMBUILD_FLAGS=--nodeps is useful only when validating the recipe on a

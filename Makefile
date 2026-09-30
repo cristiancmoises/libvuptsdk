@@ -26,10 +26,10 @@ SDK_VERSION_MINOR = 1
 SDK_VERSION_PATCH = 0
 SDK_SOVERSION     = $(SDK_VERSION_MAJOR)
 SDK_FULLVERSION   = $(SDK_VERSION_MAJOR).$(SDK_VERSION_MINOR).$(SDK_VERSION_PATCH)
-SDK_PRERELEASE    = base.1
+SDK_PRERELEASE    = base.2
 SDK_RELEASE       = $(SDK_FULLVERSION)-$(SDK_PRERELEASE)
-CODEC_VERSION     = 2.65.11
-ZUPT_VERSION      = 5.2.9
+CODEC_VERSION     = 2.65.13
+ZUPT_VERSION      = 5.2.10
 ZUPT             ?= zupt
 BEND             ?= bend
 
@@ -138,7 +138,7 @@ all: base
 
 .PHONY: base
 base: $(SOURCE_LIB) $(SOURCE_STATIC) $(PKGCONFIG)
-	@echo "Built the source-based ABI subset with VaptVupt codec 2.65.11."
+	@echo "Built the source-based ABI subset with VaptVupt codec 2.65.13."
 
 # ── Compile rules ───────────────────────────────────────────────────
 ifneq ($(filter x86_64 i386 i486 i586 i686,$(ARCH)),)
