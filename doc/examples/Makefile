@@ -61,7 +61,7 @@ test: all
 python:
 	@echo "═══ Running Python examples ═══"
 ifneq ($(LIB_PATH),)
-	ZUPTSDK_LIBRARY=$(LIB_PATH)/build/legacy/libvuptsdk.so.2 python3 06_python.py
+	ZUPTSDK_LIBRARY="$(LIB_PATH)/build/legacy/libvuptsdk.so.2" python3 06_python.py
 else
 	python3 06_python.py
 endif

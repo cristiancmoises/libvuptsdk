@@ -256,8 +256,14 @@ test-source: $(BUILD_DIR)/sdk_stream_errors $(BUILD_DIR)/sdk_key_ownership $(BUI
 .PHONY: test
 test: test-source
 
+# Run outside the checkout with site-packages and PYTHONPATH disabled.
+.PHONY: test-legacy-python
+test-legacy-python: $(STAGED_LIB)
+	$(Q)cd / && ZUPTSDK_LIBRARY="$(abspath $(STAGED_LIB))" \
+		python3 -I -S "$(CURDIR)/doc/examples/06_python.py"
+
 .PHONY: legacy-test
-legacy-test: $(STAGED_LIB) $(SOURCE_LIB) $(CODEC_TEST)
+legacy-test: test-legacy-python $(STAGED_LIB) $(SOURCE_LIB) $(CODEC_TEST)
 	$(Q)echo "  CC  tests/smoke_test"
 	$(Q)$(CC) $(CFLAGS) -Iinclude tests/smoke_test.c \
 		$(STAGED_LIB) $(SOURCE_LIB) \

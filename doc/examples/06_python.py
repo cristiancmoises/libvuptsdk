@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """All Python examples from README — must run end-to-end."""
+
 import os
 import sys
 import tempfile
+from pathlib import Path
 
-sys.path.insert(0, "/home/claude/libvuptsdk/bindings/python")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bindings" / "python"))
 import vuptsdk
 
 # Example 1: keygen + roundtrip
