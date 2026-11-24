@@ -16,11 +16,11 @@ CXXFLAGS ?= -std=c++17 -Wall -Wextra -O2
 
 # pkg-config will pick up vuptsdk.pc if installed.
 # For in-tree testing without `make install`, set:
-#   LIB_PATH=/path/to/libvuptsdk-root  (containing include/ and prebuilt/)
+#   LIB_PATH=/path/to/libvuptsdk-root
 ifneq ($(LIB_PATH),)
   CPPFLAGS += -I$(LIB_PATH)/include
-  LDFLAGS  += -L$(LIB_PATH)/prebuilt -L$(LIB_PATH)/lib \
-              -Wl,-rpath,$(LIB_PATH)/prebuilt -Wl,-rpath,$(LIB_PATH)/lib
+  LDFLAGS  += -L$(LIB_PATH)/build/legacy -L$(LIB_PATH)/lib \
+              -Wl,-rpath,$(LIB_PATH)/build/legacy -Wl,-rpath,$(LIB_PATH)/lib
 endif
 LIBS = -lvuptsdk
 
@@ -29,6 +29,13 @@ CPP_EXAMPLES = 05_cpp_raii
 
 .PHONY: all
 all: $(C_EXAMPLES) $(CPP_EXAMPLES)
+
+ifneq ($(LIB_PATH),)
+.PHONY: stage-legacy
+stage-legacy:
+	$(MAKE) -C "$(LIB_PATH)" legacy
+$(C_EXAMPLES) $(CPP_EXAMPLES) python: | stage-legacy
+endif
 
 $(C_EXAMPLES): %: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< $(LDFLAGS) $(LIBS) -o $@
@@ -54,7 +61,7 @@ test: all
 python:
 	@echo "═══ Running Python examples ═══"
 ifneq ($(LIB_PATH),)
-	ZUPTSDK_LIBRARY=$(LIB_PATH)/prebuilt/libvuptsdk.so.2 python3 06_python.py
+	ZUPTSDK_LIBRARY=$(LIB_PATH)/build/legacy/libvuptsdk.so.2 python3 06_python.py
 else
 	python3 06_python.py
 endif

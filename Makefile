@@ -26,7 +26,7 @@ SDK_VERSION_MINOR = 1
 SDK_VERSION_PATCH = 0
 SDK_SOVERSION     = $(SDK_VERSION_MAJOR)
 SDK_FULLVERSION   = $(SDK_VERSION_MAJOR).$(SDK_VERSION_MINOR).$(SDK_VERSION_PATCH)
-SDK_PRERELEASE    = base.2
+SDK_PRERELEASE    = base.3
 SDK_RELEASE       = $(SDK_FULLVERSION)-$(SDK_PRERELEASE)
 CODEC_VERSION     = 2.65.13
 ZUPT_VERSION      = 5.2.10
@@ -186,6 +186,9 @@ $(SOURCE_STATIC): $(PIC_OBJS)
 	$(Q)$(RANLIB) $@
 
 # ── Stage canonical prebuilt ────────────────────────────────────────
+.PHONY: legacy
+legacy: $(STAGED_LIB)
+
 $(STAGED_LIB): $(PREBUILT_LIB) | $(BUILD_DIR)
 	$(Q)echo "  CP  $@  [frozen prebuilt; source changes not included]"
 	$(Q)mkdir -p $(dir $@)
@@ -220,8 +223,15 @@ $(DOC_EXAMPLE): doc/example.c $(SOURCE_STATIC)
 	$(Q)echo "  CC  $@"
 	$(Q)$(CC) $(CFLAGS) -Iinclude $< $(SOURCE_STATIC) -o $@ $(LDFLAGS) $(LIBS)
 
+$(BUILD_DIR)/sdk_stream_errors: tests/sdk_stream_errors.c $(SOURCE_STATIC)
+	$(Q)$(CC) $(CFLAGS) -Iinclude $< $(SOURCE_STATIC) $(LDFLAGS) $(LIBS) \
+		-Wl,--wrap=fopen,--wrap=fclose,--wrap=fwrite,--wrap=zupt_private_staging_open_new -o $@
+
+$(BUILD_DIR)/sdk_key_ownership: tests/sdk_key_ownership.c $(SOURCE_STATIC)
+	$(Q)$(CC) $(CFLAGS) -Iinclude $< $(SOURCE_STATIC) $(LDFLAGS) $(LIBS) -Wl,--wrap=zupt_random_bytes -o $@
+
 .PHONY: test-source
-test-source: $(BUILD_DIR)/source_smoke $(CODEC_TEST) $(ENGINE_TEST) $(DOC_EXAMPLE)
+test-source: $(BUILD_DIR)/sdk_stream_errors $(BUILD_DIR)/sdk_key_ownership $(BUILD_DIR)/source_smoke $(CODEC_TEST) $(ENGINE_TEST) $(DOC_EXAMPLE)
 	$(Q)echo "═══ libvuptsdk source-only smoke test ═══"
 	$(Q)LD_LIBRARY_PATH=$(BUILD_DIR)$${LD_LIBRARY_PATH:+:$$LD_LIBRARY_PATH} \
 		$(BUILD_DIR)/source_smoke > $(BUILD_DIR)/source_smoke.stdout
@@ -238,6 +248,8 @@ test-source: $(BUILD_DIR)/source_smoke $(CODEC_TEST) $(ENGINE_TEST) $(DOC_EXAMPL
 	$(Q)echo ""
 	$(Q)echo "═══ Zupt engine integration regressions ═══"
 	$(Q)$(ENGINE_TEST)
+	$(Q)$(BUILD_DIR)/sdk_stream_errors
+	$(Q)$(BUILD_DIR)/sdk_key_ownership
 	$(Q)echo ""
 	$(Q)$(MAKE) audit-licenses
 
@@ -268,6 +280,10 @@ audit: $(SOURCE_LIB) $(PREBUILT_LIB)
 
 .PHONY: test-asan
 test-asan:
+	$(Q)$(MAKE) BUILD_DIR=$(BUILD_DIR)-asan run-asan
+
+.PHONY: run-asan
+run-asan:
 	$(Q)$(MAKE) clean
 	$(Q)$(MAKE) $(SOURCE_LIB) $(SOURCE_STATIC) \
 	  CFLAGS="$(CSTD) $(WARN) -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -DZUPT_BUILDING_SDK=1" \

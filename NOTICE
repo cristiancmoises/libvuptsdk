@@ -14,10 +14,10 @@ Upstream provenance
 -------------------
 VaptVupt codec 2.65.13:
   https://git.securityops.co/cristiancmoises/vaptvupt-codec
-  e30dc9329be7cf9f233b1ac0b1fc9ed31f530391
+  455ab7b63e668348d184e8a96e2b0c2c734b0562
 Zupt 5.2.10:
   https://git.securityops.co/cristiancmoises/zupt
-  3b3b8f494b4bdd3b74aab60388eef1694ef316f8
+  9323953251a906a6a0c3f62513ef4927f8ce240d
 UPSTREAM.json records source hashes and the local integration policy. Imported
 files have been modified for SDK integration and this licensing grant.
 

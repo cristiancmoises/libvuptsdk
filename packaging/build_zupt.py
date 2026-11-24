@@ -81,6 +81,8 @@ def stage_binary(root, stage, version):
     dynamic = subprocess.check_output(['readelf', '-d', str(shared)], text=True)
     if '(RPATH)' in dynamic or '(RUNPATH)' in dynamic:
         raise ValueError('refusing a release library with RPATH/RUNPATH')
+    if any(runtime in dynamic for runtime in ('libasan.', 'libubsan.', 'libtsan.', 'libclang_rt.')):
+        raise ValueError('refusing to package a sanitizer build; rebuild the release library')
     files = {
         shared: f'usr/lib/{shared.name}',
         root / 'build/libvuptsdk-base.a': 'usr/lib/libvuptsdk-base.a',

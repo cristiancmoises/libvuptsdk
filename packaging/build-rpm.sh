@@ -14,7 +14,7 @@ fi
 VERSION=$(make -s printversion)
 RELEASE=$(make -s printrelease)
 SOVERSION=${SOVERSION:-2}
-RPM_RELEASE=${RPM_RELEASE:-0.2.base2}
+RPM_RELEASE=${RPM_RELEASE:-0.3.base3}
 RPMBUILD_FLAGS=${RPMBUILD_FLAGS:-}
 OUT_DIR=${OUT_DIR:-$(pwd)/dist/packages}
 DIST_NAME=libvuptsdk-base-${RELEASE}
@@ -89,8 +89,8 @@ rm -rf -- $DIST_NAME
 %doc doc/API_REFERENCE.md doc/API_REFERENCE.pt-BR.md doc/example.c
 
 %changelog
-* Wed Sep 30 2026 Cristian Cezar Moisés <zupt@riseup.net> - $VERSION-$RPM_RELEASE
-- Publish the source-built base SDK with VaptVupt 2.65.13
+* Mon Nov 23 2026 Cristian Cezar Moisés <zupt@riseup.net> - $VERSION-$RPM_RELEASE
+- Update the embedded Zupt engine and isolate sanitizer builds
 EOF
 
 # RPMBUILD_FLAGS=--nodeps is useful only when validating the recipe on a

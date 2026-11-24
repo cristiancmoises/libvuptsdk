@@ -7,6 +7,13 @@ at the ABI level (see the release boundary in README.md).
 
 ---
 
+## [2.1.0-base.3] — 2026-11-23
+
+- Keep the frozen 2.0.3 binary unchanged in Git. `make legacy` prepares the linker names for historical consumers in `build/legacy/`.
+- Isolate sanitizer builds from release libraries and reject instrumented shared libraries during binary packaging.
+- Sync the embedded engine with Zupt 5.2.10 at `9323953`, including its entropy decoder bounds, Huffman length estimator, and worker startup error handling. Format 1.6 and the base ABI remain unchanged.
+- Check stream and temporary file I/O errors; distinguish caller-owned keys from temporary exports, and create extraction scratch directories with private permissions on POSIX.
+
 ## [2.1.0-base.2] — 2026-09-30
 
 - Update the source-built base library to the Zupt 5.2.10 consumer baseline

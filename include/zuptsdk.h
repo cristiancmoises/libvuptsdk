@@ -85,7 +85,7 @@ extern "C" {
 #define ZUPTSDK_VERSION_MAJOR 2
 #define ZUPTSDK_VERSION_MINOR 1
 #define ZUPTSDK_VERSION_PATCH 0
-#define ZUPTSDK_VERSION_STRING "2.1.0-base.2"
+#define ZUPTSDK_VERSION_STRING "2.1.0-base.3"
 
 /* Compile-time version check helper (negative if header older than required) */
 #define ZUPTSDK_VERSION_AT_LEAST(maj, min, pat) \
@@ -96,7 +96,7 @@ extern "C" {
 
 /**
  * Return the runtime version string of the linked library, e.g.
- * "2.1.0-base.2".
+ * "2.1.0-base.3".
  * The returned pointer is to static storage and must NOT be freed.
  *
  * Use this with the compile-time ZUPTSDK_VERSION_STRING to detect mismatch
@@ -201,7 +201,9 @@ typedef enum {
  * @param userdata  [in]  opaque pointer supplied at stream init
  * @param buf       [out] destination buffer
  * @param max_bytes max bytes to read into buf
- * @return Number of bytes actually read (0 == EOF, < 0 == error).
+ * @return Number of bytes actually read, at most max_bytes (0 == EOF,
+ *         < 0 == error). A return greater than max_bytes is rejected as
+ *         ZUPTSDK_ERR_IO.
  */
 typedef int64_t (*zuptsdk_read_fn)(void *userdata, uint8_t *buf, size_t max_bytes);
 
@@ -387,7 +389,9 @@ int zuptsdk_secure_buf_from_data(const uint8_t *data, size_t size,
  * ════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Generate a fresh hybrid keypair. Uses the system CSPRNG.
+ * Generate a fresh hybrid keypair. Uses the system CSPRNG and creates
+ * temporary key files. Destroying the keypair removes those generated files;
+ * files saved with zuptsdk_keypair_save_*() remain caller-owned.
  *
  * @param ctx     [in]
  * @param kp_out  [out,transfers] receives new keypair
@@ -410,7 +414,8 @@ int zuptsdk_keypair_save_private(const zuptsdk_keypair_t *kp, const char *path);
 int zuptsdk_keypair_save_public(const zuptsdk_keypair_t *kp, const char *path);
 
 /**
- * Load a private key from a file.
+ * Load a private key from a file. Destroying the handle does not remove the
+ * caller-owned file, which must remain available while the handle is used.
  * @param path     [in]
  * @param key_out  [out,transfers]
  */
@@ -418,13 +423,16 @@ int zuptsdk_privkey_load(const char *path, zuptsdk_privkey_t **key_out);
 void zuptsdk_privkey_destroy(zuptsdk_privkey_t *key);
 
 /**
- * Load a public key from a file.
+ * Load a public key from a file. Destroying the handle does not remove the
+ * caller-owned file, which must remain available while the handle is used.
  */
 int zuptsdk_pubkey_load(const char *path, zuptsdk_pubkey_t **key_out);
 void zuptsdk_pubkey_destroy(zuptsdk_pubkey_t *key);
 
 /**
- * Derive public key from private key (no I/O).
+ * Export a public key from a private-key file into an SDK-owned temporary
+ * file. Destroying the returned public-key handle removes that export, not
+ * the caller-owned private-key file.
  */
 int zuptsdk_privkey_get_public(const zuptsdk_privkey_t *priv,
                                zuptsdk_pubkey_t **pub_out);
@@ -509,9 +517,13 @@ int zuptsdk_extract_buffer(zuptsdk_ctx_t *ctx,
  * @param input        [in] read callback supplying source bytes
  * @param input_ud     [in] userdata passed to read callback
  * @param input_name   [in] logical filename to record in archive
- * @param input_total  total bytes to read; 0 if unknown
+ * @param input_total  reserved size hint; currently ignored
  * @param output       [in] write callback receiving archive bytes
  * @param output_ud    [in] userdata passed to write callback
+ *
+ * Read, write, and temporary-file close failures are reported as
+ * ZUPTSDK_ERR_IO; a successful return means the complete archive was
+ * flushed and delivered to the output callback.
  */
 int zuptsdk_compress_stream(zuptsdk_ctx_t *ctx,
                             const zuptsdk_options_t *opts,
@@ -523,7 +535,10 @@ int zuptsdk_compress_stream(zuptsdk_ctx_t *ctx,
 
 /**
  * Decompress an archive read from a callback, writing extracted single-file
- * content to a write callback.
+ * content to a write callback. Callback errors, oversized input callback
+ * returns, and temporary-file seek/tell/read/write/close failures return
+ * ZUPTSDK_ERR_IO. No output callback is invoked on a file-read failure.
+ * The complete archive and extracted file are buffered in memory.
  */
 int zuptsdk_decompress_stream(zuptsdk_ctx_t *ctx,
                               zuptsdk_read_fn input, void *input_ud,

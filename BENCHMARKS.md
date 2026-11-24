@@ -1,7 +1,17 @@
 # libvuptsdk performance measurements
 
-The measurements below belong to 2.1.0-base.1. They were not rerun for
-2.1.0-base.2 and do not establish the new release's throughput.
+## 2.1.0-base.3 against 2.1.0-base.2 — 2026-11-23
+
+Both revisions ran `bench/bench_archive.py` on Linux x86-64 with the same GCC build, `-O2`, baseline SSE2, one CPU and one SDK thread. Each cell is the median of five timed runs after a warm-up. The benchmark verifies every extraction against the original bytes. Timings include temporary-file I/O; results apply only to these inputs and this run.
+
+| Input | Level | Archive bytes (base.2 → base.3) | Compress ms (base.2 → base.3) | Extract ms (base.2 → base.3) |
+|---:|---:|---:|---:|---:|
+| 65,536 B | 1 | 10,900 → 10,900 | 0.54 → 0.68 | 0.21 → 0.26 |
+| 65,536 B | 9 | 3,820 → 3,820 | 38.39 → 38.91 | 0.30 → 0.32 |
+| 1,048,576 B | 1 | 87,800 → 87,800 | 3.21 → 3.12 | 1.19 → 1.19 |
+| 1,048,576 B | 9 | 3,880 → 3,880 | 53.84 → 50.70 | 1.53 → 1.41 |
+
+## Historical measurements
 
 Release: **2.1.0-base.1**. Updated: **2026-09-24**.
 
@@ -10,7 +20,7 @@ i7-13700HX**, with 16 cores and 24 logical CPUs. These are local measurements
 for the specified inputs. They do not establish a general throughput guarantee
 or infer performance from a proof.
 
-## Current source release: SDK before and after
+### SDK before and after
 
 The same public archive API workload was run against **2.0.4-base.1** and
 **2.1.0-base.1**. Both builds used GCC 14.3.0, `-O2`, baseline x86-64 SSE2 and

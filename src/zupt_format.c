@@ -665,13 +665,13 @@ zupt_error_t write_enc_header(FILE *out, zupt_archive_header_t *hdr,
         if (!opts->quiet)
             fprintf(stderr, "  Encryption: AES-256-CTR + HMAC-SHA256 (Encrypt-then-MAC)\n\n");
     } else if (opts->sdk_mode && opts->pq_mode) {
-        /* ─── SDK V2 PQ MODE (libvuptsdk: HKDF combiner + commitment + HPKE) ─── */
+        /* ─── SDK V2 PQ RECIPIENT MODE ─── */
         hdr->global_flags |= ZUPT_FLAG_PQ_HYBRID;
 
         uint8_t enc_hdr_buf[1500];
         size_t enc_hdr_len = 0;
         if (!opts->quiet)
-            fprintf(stderr, "  PQ key encapsulation via libvuptsdk (HKDF-SHA3 + commitment + HPKE)...\n");
+            fprintf(stderr, "  PQ recipient envelope via libvuptsdk SDK-v2...\n");
         if (zupt_sdk_hybrid_encrypt_init(&opts->keyring, opts->keyfile,
                                           enc_hdr_buf, &enc_hdr_len) != 0) {
             fprintf(stderr, "Error: SDK PQ key encapsulation failed.\n");
@@ -691,8 +691,10 @@ zupt_error_t write_enc_header(FILE *out, zupt_archive_header_t *hdr,
         if (zupt_write_archive_header(out, hdr) != 0) return ZUPT_ERR_IO;
         fseeko(out, 0, SEEK_END);
 
-        if (!opts->quiet)
-            fprintf(stderr, "  Encryption: SDK-v2 PQ Hybrid + XChaCha20-Poly1305 (commitment + HPKE)\n\n");
+        if (!opts->quiet) {
+            fprintf(stderr, "  Recipient envelope: libvuptsdk SDK-v2\n");
+            fprintf(stderr, "  Payload protection: AES-256-CTR + HMAC-SHA256\n\n");
+        }
     } else if (opts->pqonly_mode) {
         /* ─── FULL POST-QUANTUM MODE (ML-KEM-768 only, no X25519) ─── */
         hdr->global_flags |= ZUPT_FLAG_PQ_HYBRID;   /* generic PQ indicator; enc_type distinguishes */
@@ -5244,7 +5246,7 @@ zupt_error_t zupt_archive_info(const char *path) {
                 printf("  Post-quantum:  YES (ML-KEM-768 only, no classical layer)\n");
                 break;
             case ZUPT_ENC_PQ_SDK_V2:
-                printf("  Post-quantum:  YES (ML-KEM-768 + X25519, SDK v2 + HPKE)\n");
+                printf("  Post-quantum:  YES (libvuptsdk SDK-v2 recipient envelope)\n");
                 break;
             case ZUPT_ENC_PQ_BOX_V1:
                 printf("  Post-quantum:  YES (ML-KEM-768 + X25519, sealed box)\n");

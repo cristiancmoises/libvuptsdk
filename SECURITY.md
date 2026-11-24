@@ -1,6 +1,6 @@
 # libvuptsdk security policy
 
-Applies to **2.1.0-base.2**, the source-built base API with Zupt 5.2.10 and
+Applies to **2.1.0-base.3**, the source-built base API with Zupt 5.2.10 and
 VaptVupt codec 2.65.13. See [AUDIT.md](AUDIT.md) for release-specific evidence.
 
 ## Reporting vulnerabilities

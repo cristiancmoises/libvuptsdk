@@ -1,5 +1,19 @@
 # libvuptsdk release verification
 
+## 2.1.0-base.3 verification — 2026-11-23
+
+The base library passed 12 source smoke tests, 57 codec cases, 74 engine cases,
+14 stream cases and 19 key ownership cases. Archives exchanged with Zupt 5.2.10
+passed in all 10 tested directions. All 80 ML-KEM-768 test vectors matched,
+as did the hashes of all 54 pinned upstream reference files. The existing Bend
+model laws type-checked; they do not prove the C implementation. For measured
+compression and extraction times, see [BENCHMARKS.md](BENCHMARKS.md).
+
+`make test-asan` passed the source, codec and engine suites under ASan/UBSan.
+The optimized shared and static libraries kept the same SHA-256 hashes before
+and after that run. The release library passed all 13 ABI audit checks and has
+no sanitizer dependency, RPATH or RUNPATH.
+
 ## 2.1.0-base.2 candidate checks — 2026-09-30
 
 The current candidate integrates Zupt 5.2.10 and VaptVupt 2.65.13 while
